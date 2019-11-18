@@ -135,12 +135,29 @@ public class ParameterMapping {
             return this;
         }
 
+        /**
+         * 调用{@link #resolveTypeHandler()}解析{@link #parameterMapping}的{@link ParameterMapping#typeHandler}，然后调用{@link #validate()}进行对{@link #parameterMapping}进行校验，然后返回{@link #parameterMapping}
+         *
+         * @return
+         */
         public ParameterMapping build() {
             resolveTypeHandler();
             validate();
             return parameterMapping;
         }
 
+        /**
+         * 校验当前parameterMapping：
+         * <ul>
+         *     <li>
+         *         如果当前的{@link #parameterMapping}对应的{@link ParameterMapping#javaType}是{@link ResultSet}.class：则当前{@link #parameterMapping}的{@link ParameterMapping#resultMapId}不能为null，否则抛出异常
+         *     </li>
+         *     <li>
+         *         如果当前的{@link #parameterMapping}对应的{@link ParameterMapping#javaType}不是{@link ResultSet}.class并且它的{@link ParameterMapping#typeHandler}又是null，则抛出异常
+         *     </li>
+         * </ul>
+         *
+         */
         private void validate() {
             if (ResultSet.class.equals(parameterMapping.javaType)) {
                 if (parameterMapping.resultMapId == null) {
@@ -157,12 +174,18 @@ public class ParameterMapping {
             }
         }
 
+        /**
+         * 如果parameterMapping.typeHandler为null则通过parameterMapping.javaType和parameterMapping.jdbcType解析当前parameterMapping对应的{@link TypeHandler}对象：<br>
+         *
+         * 如果parameterMapping的{@link ParameterMapping#typeHandler}是null并且{@link ParameterMapping#javaType}不是null：从{@link #parameterMapping}的{@link ParameterMapping#configuration}获取
+         * {@link Configuration}对象然后通过{@link Configuration#getTypeHandlerRegistry()}获取{@link TypeHandlerRegistry}对象然后通过{@link TypeHandlerRegistry#getTypeHandler(Class, JdbcType)}分别
+         * 传入{@link #parameterMapping}的{@link ParameterMapping#javaType}和{@link ParameterMapping#jdbcType}获得对应的{@link TypeHandler}直接设置到{@link #parameterMapping}的{@link ParameterMapping#typeHandler}；
+         * 否则啥也不做
+         */
         private void resolveTypeHandler() {
-            // 如果不存在 typeHandler ，并且 javaType 非空，则基于 javaType + jdbcType 获得对应的 TypeHandler 对象
             if (parameterMapping.typeHandler == null && parameterMapping.javaType != null) {
                 Configuration configuration = parameterMapping.configuration;
                 TypeHandlerRegistry typeHandlerRegistry = configuration.getTypeHandlerRegistry();
-                // 基于 javaType + jdbcType 获得对应的 TypeHandler 对象
                 parameterMapping.typeHandler = typeHandlerRegistry.getTypeHandler(parameterMapping.javaType, parameterMapping.jdbcType);
             }
         }

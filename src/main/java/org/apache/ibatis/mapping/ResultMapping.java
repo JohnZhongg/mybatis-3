@@ -37,7 +37,7 @@ public class ResultMapping {
      */
     private Configuration configuration;
     /**
-     * Java 对象的属性名
+     * 映射关系承载类的属性名称或者其构造器的参数名称
      */
     private String property;
     /**
@@ -45,7 +45,7 @@ public class ResultMapping {
      */
     private String column;
     /**
-     * Java 对象的属性的类型
+     * 映射关系承载类的属性类型获取其构造器的参数类型
      */
     private Class<?> javaType;
     /**
@@ -53,7 +53,7 @@ public class ResultMapping {
      */
     private JdbcType jdbcType;
     /**
-     * TypeHandler 对象
+     * 处理映射的 TypeHandler 对象
      */
     private TypeHandler<?> typeHandler;
     /**
@@ -105,18 +105,48 @@ public class ResultMapping {
 
         private ResultMapping resultMapping = new ResultMapping();
 
+        /**
+         * 调用{@link #Builder(Configuration, String)}传入{@code configuration}和{@code property}，并将入参{@code column}和{@code typehandler}分别设置给成员变量{@link #resultMapping}的属性{@link ResultMapping#column}和{@link ResultMapping#typeHandler}
+         *
+         * @param configuration
+         * @param property
+         * @param column
+         * @param typeHandler
+         */
         public Builder(Configuration configuration, String property, String column, TypeHandler<?> typeHandler) {
             this(configuration, property);
             resultMapping.column = column;
             resultMapping.typeHandler = typeHandler;
         }
 
+        /**
+         * 调用{@link #Builder(Configuration, String)}传入{@code configuration}和{@code property}，并将入参{@code column}和{@code javaType}分别设置给成员变量{@link #resultMapping}的属性{@link ResultMapping#column}和{@link ResultMapping#javaType}
+         *
+         * @param configuration
+         * @param property
+         * @param column
+         * @param javaType
+         */
         public Builder(Configuration configuration, String property, String column, Class<?> javaType) {
             this(configuration, property);
             resultMapping.column = column;
             resultMapping.javaType = javaType;
         }
 
+        /**
+         * 设置成员变量{@link #resultMapping}的属性：
+         * <ol>
+         *     <li>
+         *         将入参{@code configuration}和{@code property}分别设置到{@link ResultMapping#configuration}、{@link ResultMapping#property}
+         *     </li>
+         *     <li>
+         *         new一个{@link ArrayList}设置到{@link ResultMapping#flags}、new一个{@link ArrayList}设置到{@link ResultMapping#composites}、获取{@link Configuration#isLazyLoadingEnabled()}设置到{@link ResultMapping#lazy}
+         *     </li>
+         * </ol>
+         *
+         * @param configuration
+         * @param property
+         */
         public Builder(Configuration configuration, String property) {
             resultMapping.configuration = configuration;
             resultMapping.property = property;
@@ -185,19 +215,50 @@ public class ResultMapping {
             return this;
         }
 
+        /**
+         * 构建一个{@link ResultMapping}对象：
+         * <ol>
+         *     <li>
+         *         分别将成员变量{@link #resultMapping}的{@link ResultMapping#flags}和{@link ResultMapping#composites}通过{@link Collections#unmodifiableList(List)}转化成不可修改集合
+         *     </li>
+         *     <li>
+         *         调用{@link #resolveTypeHandler()}尝试解析成员变量{@link #resultMapping}的{@link ResultMapping#typeHandler}
+         *     </li>
+         *     <li>
+         *         调用{@link #validate()}对成员变量{@link #resultMapping}进行相关必要的校验
+         *     </li>
+         *     <li>
+         *         校验如果通过证明该{@link #resultMapping}是合格的，将其作为方法结果进行返回
+         *     </li>
+         * </ol>
+         *
+         * @return
+         */
         public ResultMapping build() {
-            // lock down collections
             resultMapping.flags = Collections.unmodifiableList(resultMapping.flags);
             resultMapping.composites = Collections.unmodifiableList(resultMapping.composites);
-            // 解析 TypeHandler
             resolveTypeHandler();
-            // 校验
             validate();
             return resultMapping;
         }
 
         /**
-         * 校验
+         * 校验：
+         * <ol>
+         *     <li>
+         *         成员变量{@link #resultMapping}的{@link ResultMapping#nestedQueryId}和{@link ResultMapping#nestedResultMapId}不能同时不为null，否则抛出异常{@link IllegalStateException}
+         *     </li>
+         *     <li>
+         *         成员变量{@link #resultMapping}的{@link ResultMapping#nestedQueryId}和{@link ResultMapping#nestedResultMapId}和{@link ResultMapping#typeHandler}不能同时为null，否则抛出异常{@link IllegalStateException}
+         *     </li>
+         *     <li>
+         *         成员变量{@link #resultMapping}的{@link ResultMapping#nestedResultMapId}和{@link ResultMapping#column}和{@link ResultMapping#composites}不能为null和empty，否则抛出异常{@link IllegalStateException}
+         *     </li>
+         *     <li>
+         *         如果成员变量{@link #resultMapping}的{@link ResultMapping#resultSet}不为null，则使用逗号","对{@link ResultMapping#column}和{@link ResultMapping#foreignColumn}进行切割分别得到两个数组，如果他们的长度不相等，则抛出异常{@link IllegalStateException}
+         *     </li>
+         * </ol>
+         *
          */
         private void validate() {
             // Issue #697: cannot define both nestedQueryId and nestedResultMapId
@@ -228,10 +289,13 @@ public class ResultMapping {
         }
 
         /**
-         * 解析 TypeHandler
+         * 当成员变量{@link #resultMapping}的{@link ResultMapping#typeHandler}为null的时候尝试去解析它：<br>
+         *
+         * 如果成员变量{@link #resultMapping}的{@link ResultMapping#typeHandler}为null且其{@link ResultMapping#javaType}不为null，通过它的成员变量{@link ResultMapping#configuration}获取{@link Configuration}对象然后通过{@link Configuration#getTypeHandlerRegistry()}获取{@link TypeHandlerRegistry}对象，然后调用
+         * {@link TypeHandlerRegistry#getTypeHandler(Class, JdbcType)}分别传入{@link ResultMapping#javaType}和{@link ResultMapping#jdbcType}获取{@link TypeHandler}对象并设置到
+         * 它的成员变量{@link ResultMapping#typeHandler}
          */
         private void resolveTypeHandler() {
-            // 使用 javaType + jdbcType ，获取对应的 TypeHandler 对象
             if (resultMapping.typeHandler == null && resultMapping.javaType != null) {
                 Configuration configuration = resultMapping.configuration;
                 TypeHandlerRegistry typeHandlerRegistry = configuration.getTypeHandlerRegistry();
@@ -289,6 +353,9 @@ public class ResultMapping {
         return composites;
     }
 
+    /**
+     * @return {@link #composites} != null && !{@link #composites}.isEmpty()
+     */
     public boolean isCompositeResult() {
         return this.composites != null && !this.composites.isEmpty();
     }
@@ -313,6 +380,27 @@ public class ResultMapping {
         this.lazy = lazy;
     }
 
+    /**
+     * 覆盖逻辑：两个{@link ResultMapping}对象的{@link #property}都不为null则"equals"
+     *
+     * <ol>
+     *     <li>
+     *         如果当前{@link ResultMapping}对象 == 传入参数{@code o}，返回true，否则下一步
+     *     </li>
+     *     <li>
+     *         如果传入参数{@code o}为null 或者 当前对象的{@link Class}对象 != 传入{@code o}.getClass()，返回false，否则下一步
+     *     </li>
+     *     <li>
+     *         如果当前对象成员变量{@link #property}为null 或者 !{@link #property}.equals({@code o}.property)，返回false，否则下一步
+     *     </li>
+     *     <li>
+     *         上面都不符合，则返回true
+     *     </li>
+     * </ol>
+     *
+     * @param o
+     * @return
+     */
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -331,6 +419,22 @@ public class ResultMapping {
         return true;
     }
 
+    /**
+     * 覆盖逻辑：
+     * <ol>
+     *     <li>
+     *         如果成员变量{@link #property}不为null，则返回{@link #property}.hashCode()，否则下一步
+     *     </li>
+     *     <li>
+     *         如果成员变量{@link #column}不为null，则返回{@link #column}.hashCode()，否则下一步
+     *     </li>
+     *     <li>
+     *         上面都不满足，返回 0
+     *     </li>
+     * </ol>
+     *
+     * @return
+     */
     @Override
     public int hashCode() {
         if (property != null) {

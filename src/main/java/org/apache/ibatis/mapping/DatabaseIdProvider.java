@@ -22,9 +22,7 @@ import java.util.Properties;
 /**
  * Should return an id to identify the type of this database.
  * That id can be used later on to build different queries for each database type
- * This mechanism enables supporting multiple vendors or versions
- *
- * 数据库标识提供器接口
+ * This mechanism enables supporting multiple vendors or version
  *
  * @author Eduardo Macarron
  */

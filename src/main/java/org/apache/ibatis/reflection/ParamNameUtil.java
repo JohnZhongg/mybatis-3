@@ -28,7 +28,7 @@ import java.util.List;
  */
 public class ParamNameUtil {
     /**
-     * 调用jdk底层方法获取成员方法参数类{@link Parameter#getName()}获取参数名称，获取的名称是arg01，arg02...
+     * 调用{@link #getParameterNames(Executable)}方法获取参数名称，获取的名称是arg01，arg02...如果是无参可执行对象，则返回一个长度为0的空列表
      * @param method 成员方法
      * @return 返回参数名List
      */
@@ -37,7 +37,7 @@ public class ParamNameUtil {
     }
 
     /**
-     * 调用jdk底层方法获取构造方法参数类{@link Parameter#getName()}获取参数名称，获取的名称是arg01，arg02...
+     * 调用{@link #getParameterNames(Executable)}方法获取参数名称，获取的名称是arg01，arg02...如果是无参可执行对象，则返回一个长度为0的空列表
      * @param constructor 构造方法
      * @return 返回参数名List
      */
@@ -46,7 +46,7 @@ public class ParamNameUtil {
     }
 
     /**
-     * 调用jdk底层方法获取方法参数类{@link Parameter#getName()}获取参数名称，获取的名称是arg01，arg02...
+     * 传入一个{@link Executable}对象{@code executable}，然后调用{@link Executable#getParameters()}获得一个{@link Parameter}数组，然后依次循环所有元素调用jdk底层方法{@link Parameter#getName()}获取方法参数名称，获取的名称是arg01，arg02...如果是无参可执行对象，则返回一个长度为0的空数组
      * @param executable 可执行的类（Constructor和Method）
      * @return 返回参数名称List
      */

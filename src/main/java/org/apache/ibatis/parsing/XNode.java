@@ -230,10 +230,23 @@ public class XNode {
         }
     }
 
+    /**
+     * 调用{@link #getStringAttribute(String, String)}传入{@code name}和null，从{@link #attributes}中获取key为{@code name}的value（{@link #attributes}中的value都是处理了token"${}"的）
+     *
+     * @param name
+     * @return
+     */
     public String getStringAttribute(String name) {
         return getStringAttribute(name, null);
     }
 
+    /**
+     * 从{@link #attributes}中获取key为{@code name}的value，如果value是null，则返回{@code def}。（{@link #attributes}中的value都是处理了token"${}"的）
+     *
+     * @param name
+     * @param def
+     * @return
+     */
     public String getStringAttribute(String name, String def) {
         String value = attributes.getProperty(name);
         if (value == null) {
@@ -256,10 +269,23 @@ public class XNode {
         }
     }
 
+    /**
+     * 调用{@link #getIntAttribute(String, Integer)}传入{@code name}和null
+     *
+     * @param name
+     * @return
+     */
     public Integer getIntAttribute(String name) {
         return getIntAttribute(name, null);
     }
 
+    /**
+     * 从{@link #attributes}中获取key为{@code name}的value，如果value是null，则返回{@code def}；否则返回{@link Integer#parseInt(String)}传入value之后获得的值。（{@link #attributes}中的value都是处理了token"${}"的）
+     *
+     * @param name
+     * @param def
+     * @return
+     */
     public Integer getIntAttribute(String name, Integer def) {
         String value = attributes.getProperty(name);
         if (value == null) {

@@ -32,7 +32,7 @@ public class ParameterMap {
      */
     private String id;
     /**
-     * 类型
+     * 承载ParameterMappings的类型
      *
      * 适用于 paramType="" 标签属性
      */
@@ -51,16 +51,32 @@ public class ParameterMap {
 
         private ParameterMap parameterMap = new ParameterMap();
 
+        /**
+         * 将{@code id}、{@code type}、{@code parameterMappings}分别设置给内部成员变量{@link #parameterMap}
+         *
+         * @param configuration
+         * @param id
+         * @param type
+         * @param parameterMappings
+         */
         public Builder(Configuration configuration, String id, Class<?> type, List<ParameterMapping> parameterMappings) {
             parameterMap.id = id;
             parameterMap.type = type;
             parameterMap.parameterMappings = parameterMappings;
         }
 
+        /**
+         * @return parameterMap.type
+         */
         public Class<?> type() {
             return parameterMap.type;
         }
 
+        /**
+         * 将成员变量{@link #parameterMap}的{@link ParameterMap#parameterMappings}调用{@link Collections#unmodifiableList(List)}转换为一个不可修改的集合并设置，然后返回该成员变量{@link #parameterMap}
+         *
+         * @return
+         */
         public ParameterMap build() {
             //lock down collections
             parameterMap.parameterMappings = Collections.unmodifiableList(parameterMap.parameterMappings);

@@ -197,9 +197,9 @@ public class Configuration {
      */
     protected final Map<String, MappedStatement> mappedStatements = new StrictMap<>("Mapped Statements collection");
     /**
-     * Cache 对象集合
+     * Cache 对象Map：
      *
-     * KEY：命名空间 namespace
+     * key为完整的namespace或者简短的namespace（{@link StrictMap#getShortName(String)}）
      */
     protected final Map<String, Cache> caches = new StrictMap<>("Caches collection");
     /**
@@ -208,6 +208,11 @@ public class Configuration {
      * KEY：`${namespace}.${id}`
      */
     protected final Map<String, ResultMap> resultMaps = new StrictMap<>("Result Maps collection");
+    /**
+     * ParameterMap的映射
+     *
+     * KEY：`${namespace}.${id}`
+     */
     protected final Map<String, ParameterMap> parameterMaps = new StrictMap<>("Parameter Maps collection");
     /**
      * KeyGenerator 的映射
@@ -249,7 +254,6 @@ public class Configuration {
      * references a cache bound to another namespace and the value is the
      * namespace which the actual cache is bound to.
      *
-     * Cache 指向的映射
      *
      * @see #addCacheRef(String, String)
      * @see org.apache.ibatis.builder.xml.XMLMapperBuilder#cacheRefElement(XNode)
@@ -321,11 +325,14 @@ public class Configuration {
         return this.vfsImpl;
     }
 
+    /**
+     * 设置自定义{@link VFS}实现类，先将{@code vfsImpl}设置为{@link Configuration#vfsImpl}，然后调用{@link VFS#addImplClass(Class)}
+     *
+     * @param vfsImpl
+     */
     public void setVfsImpl(Class<? extends VFS> vfsImpl) {
         if (vfsImpl != null) {
-            // 设置 vfsImpl 属性
             this.vfsImpl = vfsImpl;
-            // 添加到 VFS 中的自定义 VFS 类的集合
             VFS.addImplClass(this.vfsImpl);
         }
     }
@@ -398,6 +405,12 @@ public class Configuration {
         loadedResources.add(resource);
     }
 
+    /**
+     * {@link Configuration#loadedResources}是否{@link Set#contains(Object)}
+     *
+     * @param resource
+     * @return
+     */
     public boolean isResourceLoaded(String resource) {
         return loadedResources.contains(resource);
     }
@@ -611,6 +624,11 @@ public class Configuration {
         return interceptorChain.getInterceptors();
     }
 
+    /**
+     * 返回{@link #languageRegistry}
+     *
+     * @return
+     */
     public LanguageDriverRegistry getLanguageRegistry() {
         return languageRegistry;
     }
@@ -717,6 +735,11 @@ public class Configuration {
         return keyGenerators.containsKey(id);
     }
 
+    /**
+     * 调用成员变量{@link #caches}的{@link StrictMap#put(String, Object)}方法将{@code cache}的{@link Cache#getId()}作为key，{@code cache}本身作为value进行设置
+     *
+     * @param cache
+     */
     public void addCache(Cache cache) {
         caches.put(cache.getId(), cache);
     }
@@ -729,6 +752,12 @@ public class Configuration {
         return caches.values();
     }
 
+    /**
+     * 调用{@link StrictMap#get(Object)}获取{@link Cache}对象
+     *
+     * @param id
+     * @return
+     */
     public Cache getCache(String id) {
         return caches.get(id);
     }
@@ -737,6 +766,21 @@ public class Configuration {
         return caches.containsKey(id);
     }
 
+    /**
+     * <ol>
+     *     <li>
+     *         调用成员变量{@link #resultMaps}的重写方法{@link StrictMap#put(String, Object)}传入{@code rm}的id和{@code rm}本身记录{@code rm}到{@link #resultMaps}
+     *     </li>
+     *     <li>
+     *         调用{@link #checkLocallyForDiscriminatedNestedResultMaps(ResultMap)}检查{@code rm}是否存在拥有nested result map的discriminator result map
+     *     </li>
+     *     <li>
+     *         调用{@link #checkGloballyForDiscriminatedNestedResultMaps(ResultMap)}检查{@code rm}是否拥有过nested result map且当前{@link Configuration}中所有{@link ResultMap}对象是否有通过discriminator引用了{@code rm}的情况
+     *     </li>
+     * </ol>
+     *
+     * @param rm 要记录的{@link ResultMap}对象
+     */
     public void addResultMap(ResultMap rm) {
         // 添加到 resultMaps 中
         resultMaps.put(rm.getId(), rm);
@@ -746,22 +790,45 @@ public class Configuration {
         checkGloballyForDiscriminatedNestedResultMaps(rm);
     }
 
+    /**
+     * @return {@link #resultMaps}.keySet()
+     */
     public Collection<String> getResultMapNames() {
         return resultMaps.keySet();
     }
 
+    /**
+     * @return {@link #resultMaps}.values()
+     */
     public Collection<ResultMap> getResultMaps() {
         return resultMaps.values();
     }
 
+    /**
+     * 传入一个{@link ResultMap}对象的id（全称或者缩写），调用成员变量{@link #resultMaps}.get(id)获取对应的{@link ResultMap}对象
+     *
+     * @param id
+     * @return
+     */
     public ResultMap getResultMap(String id) {
         return resultMaps.get(id);
     }
 
+    /**
+     * 传入一个{@link ResultMap}对象的id（全称或者缩写），调用成员变量{@link #resultMaps}.containsKey(id)来判断是否拥有该对象
+     *
+     * @param id
+     * @return
+     */
     public boolean hasResultMap(String id) {
         return resultMaps.containsKey(id);
     }
 
+    /**
+     * 根据{@code pm}的{@link ParameterMap#getId()}作为key，{@code pm}作为value，然后调用成员变量{@link #parameterMaps}的{@link StrictMap#put(String, Object)}方法put到容器中
+     *
+     * @param pm
+     */
     public void addParameterMap(ParameterMap pm) {
         parameterMaps.put(pm.getId(), pm);
     }
@@ -854,7 +921,6 @@ public class Configuration {
     }
 
     public void addMappers(String packageName) {
-        // 扫描该包下所有的 Mapper 接口，并添加到 mapperRegistry 中
         mapperRegistry.addMappers(packageName);
     }
 
@@ -930,23 +996,35 @@ public class Configuration {
 
 
     /**
-     * 遍历全局的 ResultMap 集合，若其拥有 Discriminator 对象，则判断是否强制标记为有内嵌的 ResultMap
+     * 如果{@code rm}拥有nested result map则将所有通过{@link Discriminator}引用了当前{@code rm}的{@link ResultMap}调用{@link ResultMap#forceNestedResultMaps()}标识为拥有nested result map：
+     * <ol>
+     *     <li>
+     *         如果{@code rm}的{@link ResultMap#hasNestedResultMaps()}为true则继续往下，否则直接返回
+     *     </li>
+     *     <li>
+     *         遍历当前{@link #resultMaps}的value（所有{@link ResultMap}对象）：
+     *         <ul>
+     *             <li>
+     *                 如果当前迭代的{@link ResultMap}对象：不为null且{@link ResultMap#hasNestedResultMaps()}为false且{@link ResultMap#getDiscriminator()}不为null，则通过{@link ResultMap#getDiscriminator()}然后再调用{@link Discriminator#getDiscriminatorMap()}最终得到一个{@link Map#values()}
+     *                 得到当前迭代的{@link ResultMap}对象的所有通过{@link Discriminator}指向的{@link ResultMap}的id，然后判断这些id中是否包含了{@code rm}的id，如果包含就调用当前迭代的{@link ResultMap#forceNestedResultMaps()}
+     *             </li>
+     *             <li>
+     *                 否则什么都不做
+     *             </li>
+     *         </ul>
+     *     </li>
+     * </ol>
      *
      * @param rm ResultMap 对象
      */
     // Slow but a one time cost. A better solution is welcome.
     protected void checkGloballyForDiscriminatedNestedResultMaps(ResultMap rm) {
-        // 如果传入的 ResultMap 有内嵌的 ResultMap
         if (rm.hasNestedResultMaps()) {
-            // 遍历全局的 ResultMap 集合
             for (Map.Entry<String, ResultMap> entry : resultMaps.entrySet()) {
                 Object value = entry.getValue();
                 if (value != null) {
                     ResultMap entryResultMap = (ResultMap) value;
-                    // 判断遍历的全局的 entryResultMap 不存在内嵌 ResultMap 并且有 Discriminator
                     if (!entryResultMap.hasNestedResultMaps() && entryResultMap.getDiscriminator() != null) {
-                        // 判断是否 Discriminator 的 ResultMap 集合中，使用了传入的 ResultMap 。
-                        // 如果是，则标记为有内嵌的 ResultMap
                         Collection<String> discriminatedResultMapNames = entryResultMap.getDiscriminator().getDiscriminatorMap().values();
                         if (discriminatedResultMapNames.contains(rm.getId())) {
                             entryResultMap.forceNestedResultMaps();
@@ -958,20 +1036,26 @@ public class Configuration {
     }
 
     /**
-     * 若传入的 ResultMap 不存在内嵌 ResultMap 并且有 Discriminator ，则判断是否需要强制表位有内嵌的 ResultMap
+     * 判断{@code rm}是否有通过{@link Discriminator}指向的{@link ResultMap}对象，这些{@link ResultMap}对象是否有nested result map，如果有就给当前{@code rm}也打上拥有nested result map的标识：
+     * <ol>
+     *     <li>
+     *         如果{@code rm}的{@link ResultMap#hasNestedResultMaps()}为false且{@link ResultMap#getDiscriminator()}不为null，则继续往下；否则什么都不做直接返回
+     *     </li>
+     *     <li>
+     *         通过{@link ResultMap#getDiscriminator()}然后再通过{@link Discriminator#getDiscriminatorMap()}得到一个{@link Map}，然后或者这个{@link Map#values()}即为{@code rm}的所有通过
+     *         {@link Discriminator}引用的{@link ResultMap}对象id集合，然后遍历这个集合，对于每一个迭代的{@link ResultMap}对象id：通过{@link #resultMaps}.get(id)获取对应的{@link ResultMap}对象
+     *         并判断该对象{@link ResultMap#hasNestedResultMaps()}是否为true，为true则调用{@code rm}的{@link ResultMap#forceNestedResultMaps()}并break；为false则什么也不做继续遍历直至遍历完成
+     *     </li>
+     * </ol>
      *
      * @param rm ResultMap 对象
-     * @see #checkGloballyForDiscriminatedNestedResultMaps(ResultMap) 方法，互为倒影
      */
     // Slow but a one time cost. A better solution is welcome.
     protected void checkLocallyForDiscriminatedNestedResultMaps(ResultMap rm) {
-        // 如果传入的 ResultMap 不存在内嵌 ResultMap 并且有 Discriminator
         if (!rm.hasNestedResultMaps() && rm.getDiscriminator() != null) {
-            // 遍历传入的 ResultMap 的 Discriminator 的 ResultMap 集合
             for (Map.Entry<String, String> entry : rm.getDiscriminator().getDiscriminatorMap().entrySet()) {
                 String discriminatedResultMapName = entry.getValue();
                 if (hasResultMap(discriminatedResultMapName)) {
-                    // 如果引用的 ResultMap 存在内嵌 ResultMap ，则标记传入的 ResultMap 存在内嵌 ResultMap
                     ResultMap discriminatedResultMap = resultMaps.get(discriminatedResultMapName);
                     if (discriminatedResultMap.hasNestedResultMaps()) {
                         rm.forceNestedResultMaps();
@@ -1007,6 +1091,32 @@ public class Configuration {
             this.name = name;
         }
 
+        /**
+         * 传入完整的key以及value：
+         * <ol>
+         *     <li>
+         *         如果完整的key已经存在（{@link HashMap#containsKey(Object)}），直接抛出异常，否则继续
+         *     </li>
+         *     <li>
+         *         如果完整的key包含"."，调用{@link #getShortName(String)}获取简短key：
+         *         <ul>
+         *             <li>
+         *                 如果该简短key没有对应的value，则将传入value设置给该简短key
+         *             </li>
+         *             <li>
+         *                 如果该简短key已经存在value，则设置一个{@link Ambiguity}对象给它，表示冲突了
+         *             </li>
+         *         </ul>
+         *     </li>
+         *     <li>
+         *         将value设置给该完整key
+         *     </li>
+         * </ol>
+         *
+         * @param key
+         * @param value
+         * @return
+         */
         @SuppressWarnings("unchecked")
         public V put(String key, V value) {
             if (containsKey(key)) {
@@ -1023,6 +1133,24 @@ public class Configuration {
             return super.put(key, value);
         }
 
+        /**
+         * 传入完整的key或者简短的key获取对应的value
+         *
+         * <ol>
+         *     <li>
+         *         调用super.get(key)从继承的hashmap容器中获取对应的value
+         *     </li>
+         *     <li>
+         *         如果对应的value是null，抛出异常
+         *     </li>
+         *     <li>
+         *         如果对应的value是{@link Ambiguity}，抛出异常
+         *     </li>
+         * </ol>
+         *
+         * @param key
+         * @return
+         */
         public V get(Object key) {
             V value = super.get(key);
             if (value == null) {
@@ -1035,11 +1163,20 @@ public class Configuration {
             return value;
         }
 
+        /**
+         * 如果传入的{@code key}包含"."，对其进行切割，取切割之后得到的数组的最后一个字符串并返回
+         *
+         * @param key
+         * @return
+         */
         private String getShortName(String key) {
             final String[] keyParts = key.split("\\.");
             return keyParts[keyParts.length - 1];
         }
 
+        /**
+         * 当命名空间的简称在map中存在冲突时，将当前对象设置为其value，以示冲突
+         */
         protected static class Ambiguity {
             final private String subject;
 

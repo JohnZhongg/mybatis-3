@@ -99,10 +99,8 @@ public class MapperAnnotationBuilder {
      * 解析注解
      */
     public void parse() {
-        // 判断当前 Mapper 接口是否应加载过。
         String resource = type.toString();
         if (!configuration.isResourceLoaded(resource)) {
-            // 加载对应的 XML Mapper
             loadXmlResource();
             // 标记该 Mapper 接口已经加载过
             configuration.addLoadedResource(resource);
@@ -150,16 +148,32 @@ public class MapperAnnotationBuilder {
     }
 
     /**
-     * 加载对应的 XML Mapper
+     * 加载当前mapper对应的xml："namespace:" + {@link #type}的{@link Class#getName()}作为当前xml的唯一标识
+     * <ul>
+     *     检查当前mapper xml是否已经加载过：通过{@link Configuration#isResourceLoaded(String)}方法查看{@link Configuration#loadedResources}中是否包含当前xml的唯一标识
+     *     <li>
+     *         如果已经加载过，什么也不做，直接返回
+     *     </li>
+     *     <li>
+     *         将{@link #type}的全限定名中的"."替换为"/"并加上".xml"后缀作为相对类路径资源名称并尝试在所有的classpath上寻找该资源(通过{@link #type}.getResourceAsStream()和{@link Resources#getResourceAsStream(ClassLoader, String)})：
+     *         <ul>
+     *             <li>
+     *                 如果找到资源，则分别将xml资源对应的{@link InputStream}、{@link Configuration}对象、xml文件相对类路径、{@link Configuration#getSqlFragments()}、mapper的全限定名共5个参数传入到{@link XMLMapperBuilder#XMLMapperBuilder(InputStream, Configuration, String, Map, String)}构建{@link XMLMapperBuilder}对象，
+     *                 然后调用{@link XMLMapperBuilder#parse()}方法
+     *             </li>
+     *             <li>
+     *                 如果找不到资源，什么也不做，直接返回
+     *             </li>
+     *         </ul>
+     *     </li>
+     * </ul>
+     *
      */
     private void loadXmlResource() {
         // Spring may not know the real resource name so we check a flag
         // to prevent loading again a resource twice
         // this flag is set at XMLMapperBuilder#bindMapperForNamespace
-        // 判断 Mapper XML 是否已经加载过，如果加载过，就不加载了。
-        // 此处，是为了避免和 XMLMapperBuilder#parse() 方法冲突，重复解析
         if (!configuration.isResourceLoaded("namespace:" + type.getName())) {
-            // 获得 InputStream 对象
             String xmlResource = type.getName().replace('.', '/') + ".xml";
             // #1347
             InputStream inputStream = type.getResourceAsStream("/" + xmlResource);
@@ -171,7 +185,6 @@ public class MapperAnnotationBuilder {
                     // ignore, resource is not required
                 }
             }
-            // 创建 XMLMapperBuilder 对象，执行解析
             if (inputStream != null) {
                 XMLMapperBuilder xmlParser = new XMLMapperBuilder(inputStream, assistant.getConfiguration(), xmlResource, configuration.getSqlFragments(), type.getName());
                 xmlParser.parse();

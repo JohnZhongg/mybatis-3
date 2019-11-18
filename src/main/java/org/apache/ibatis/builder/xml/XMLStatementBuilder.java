@@ -30,7 +30,7 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Statement XML 配置构建器，主要负责解析 Statement 配置，即 <select />、<insert />、<update />、<delete /> 标签。
+ * Statement XML 配置构建器，主要负责解析 Statement 配置，即 {@code <select />}、{@code <insert />}、{@code <update />}、{@code <delete />} 标签
  *
  * @author Clinton Begin
  */
@@ -38,11 +38,11 @@ public class XMLStatementBuilder extends BaseBuilder {
 
     private final MapperBuilderAssistant builderAssistant;
     /**
-     * 当前 XML 节点，例如：<select />、<insert />、<update />、<delete /> 标签
+     * 当前 XML 节点，例如：{@code <select />}、{@code <insert />}、{@code <update />}、{@code <delete />} 标签对应的{@link XNode}对象
      */
     private final XNode context;
     /**
-     * 要求的 databaseId
+     * 要求的 databaseId （{@link Configuration#databaseId}）
      */
     private final String requiredDatabaseId;
 
@@ -58,18 +58,30 @@ public class XMLStatementBuilder extends BaseBuilder {
     }
 
     /**
-     * 执行解析
+     * 执行解析：
+     * <ol>
+     *     <li>
+     *         通过{@link XNode#getStringAttribute(String)}获取成员变量{@link #context}的属性"id"和"databaseId"的值
+     *     </li>
+     *     <li>
+     *         调用{@link #databaseIdMatchesCurrent(String, String, String)}传入上一步获取的"id"、"databaseId"属性值、成员变量{@link #requiredDatabaseId}判断databaseId是否匹配：不匹配直接return；匹配则继续往下走。
+     *     </li>
+     *     <li>
+     *         通过{@link XNode#getIntAttribute(String)}获取"fetchSize"和"timeout"的属性值；通过{@link XNode#getStringAttribute(String)}获取"parameterMap"、"parameterType"、"resultMap"、"resultType"、"lang"属性的值
+     *     </li>
+     *     <li>
+     *         调用{@link #getLanguageDriver(String)}传入第3步获得的"lang"属性值取得对应的{@link LanguageDriver}对象
+     *     </li>
+     * </ol>
+     *
      */
     public void parseStatementNode() {
-        // 获得 id 属性，编号。
         String id = context.getStringAttribute("id");
-        // 获得 databaseId ， 判断 databaseId 是否匹配
         String databaseId = context.getStringAttribute("databaseId");
         if (!databaseIdMatchesCurrent(id, databaseId, this.requiredDatabaseId)) {
             return;
         }
 
-        // 获得各种属性
         Integer fetchSize = context.getIntAttribute("fetchSize");
         Integer timeout = context.getIntAttribute("timeout");
         String parameterMap = context.getStringAttribute("parameterMap");
@@ -79,7 +91,6 @@ public class XMLStatementBuilder extends BaseBuilder {
         String resultType = context.getStringAttribute("resultType");
         String lang = context.getStringAttribute("lang");
 
-        // 获得 lang 对应的 LanguageDriver 对象
         LanguageDriver langDriver = getLanguageDriver(lang);
 
         // 获得 resultType 对应的类
@@ -232,18 +243,25 @@ public class XMLStatementBuilder extends BaseBuilder {
     }
 
     /**
-     * 获得对应的 LanguageDriver 对象
+     * 获得对应的 LanguageDriver 对象：
+     * <ul>
+     *     判断{@code lang}是否为null：
+     *     <li>
+     *         为null则直接调用成员变量{@link #builderAssistant}的{@link MapperBuilderAssistant#getLanguageDriver(Class)}传入null并return其结果
+     *     </li>
+     *     <li>
+     *         不为null则调用{@link #resolveClass(String)}传入{@code lang}解析得到对应的{@link Class}对象，然后调用成员变量{@link #builderAssistant}的{@link MapperBuilderAssistant#getLanguageDriver(Class)}传入前面解析得到的{@link Class}对象并return其结果
+     *     </li>
+     * </ul>
      *
-     * @param lang 语言
+     * @param lang "lang"属性值
      * @return LanguageDriver 对象
      */
     private LanguageDriver getLanguageDriver(String lang) {
-        // 解析 lang 对应的类
         Class<? extends LanguageDriver> langClass = null;
         if (lang != null) {
             langClass = resolveClass(lang);
         }
-        // 获得 LanguageDriver 对象
         return builderAssistant.getLanguageDriver(langClass);
     }
 

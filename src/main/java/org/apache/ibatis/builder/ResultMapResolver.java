@@ -50,10 +50,21 @@ public class ResultMapResolver {
      */
     private final List<ResultMapping> resultMappings;
     /**
-     * 是否自动匹配
+     * 是否自动匹配，会覆盖全局设置({@code <settings/>})中的"autoMappingBehavior"属性
      */
     private final Boolean autoMapping;
 
+    /**
+     * 设置成员变量：{@link #assistant}、{@link #id}、{@link #type}、{@link #extend}、{@link #discriminator}、{@link #resultMappings}、{@link #autoMapping}
+     *
+     * @param assistant
+     * @param id
+     * @param type
+     * @param extend
+     * @param discriminator
+     * @param resultMappings
+     * @param autoMapping
+     */
     public ResultMapResolver(MapperBuilderAssistant assistant, String id, Class<?> type, String extend, Discriminator discriminator, List<ResultMapping> resultMappings, Boolean autoMapping) {
         this.assistant = assistant;
         this.id = id;
@@ -64,6 +75,12 @@ public class ResultMapResolver {
         this.autoMapping = autoMapping;
     }
 
+    /**
+     * 调用成员变量{@link #assistant}的{@link MapperBuilderAssistant#addResultMap(String, Class, String, Discriminator, List, Boolean)}传入成员变量：{@link #id}、{@link #type}、{@link #extend}、{@link #discriminator}、{@link #resultMappings}、{@link #autoMapping}
+     * 构建{@link ResultMap}对象并记录到{@link org.apache.ibatis.session.Configuration}中然后返回
+     *
+     * @return {@link ResultMap}对象
+     */
     public ResultMap resolve() {
         return assistant.addResultMap(this.id, this.type, this.extend, this.discriminator, this.resultMappings, this.autoMapping);
     }

@@ -73,6 +73,11 @@ public class CacheBuilder {
      */
     private boolean blocking;
 
+    /**
+     * 传入{@link Cache}的唯一标识（或者叫做namespace），为{@link CacheBuilder#id}，并new一个{@link ArrayList}对象设置到{@link CacheBuilder#decorators}
+     *
+     * @param id
+     */
     public CacheBuilder(String id) {
         this.id = id;
         this.decorators = new ArrayList<>();
@@ -115,26 +120,43 @@ public class CacheBuilder {
         return this;
     }
 
+    /**
+     * <ol>
+     *     <li>
+     *         调用{@link #setDefaultImplementations()}设置基础{@link Cache}类和包装{@link Cache}类默认值
+     *     </li>
+     *     <li>
+     *         调用{@link #newBaseCacheInstance(Class, String)}获取基础{@link Cache}对象
+     *     </li>
+     *     <li>
+     *         调用{@link #setCacheProperties(Cache)}设置属性给基础{@link Cache}类，并执行一些可能针对该properties的操作
+     *     </li>
+     *     <li>
+     *         判断基础{@link Cache}是否为{@link PerpetualCache}.class：
+     *         <ul>
+     *             <li>
+     *                 是则遍历所有{@link #decorators}，调用{@link #newCacheDecoratorInstance(Class, Cache)}对基础{@link Cache}进行包装并执行{@link #setCacheProperties(Cache)}
+     *             </li>
+     *             <li>
+     *                 否则判断基础{@link Cache}是否是{@link LoggingCache}：如果是则直接返回该基础{@link Cache}；否则使用{@link LoggingCache}包装该基础{@link Cache}后返回
+     *             </li>
+     *         </ul>
+     *     </li>
+     * </ol>
+     *
+     * @return
+     */
     public Cache build() {
-        // 设置默认实现类
         setDefaultImplementations();
-        // 创建基础 Cache 对象
         Cache cache = newBaseCacheInstance(implementation, id);
-        // 设置属性
         setCacheProperties(cache);
         // issue #352, do not apply decorators to custom caches
-        // 如果是 PerpetualCache 类，则进行包装
         if (PerpetualCache.class.equals(cache.getClass())) {
-            // 遍历 decorators ，进行包装
             for (Class<? extends Cache> decorator : decorators) {
-                // 包装 Cache 对象
                 cache = newCacheDecoratorInstance(decorator, cache);
-                // 设置属性
                 setCacheProperties(cache);
             }
-            // 执行标准化的 Cache 包装
             cache = setStandardDecorators(cache);
-        // 如果是自定义的 Cache 类，则包装成 LoggingCache 对象，因为要统计。
         } else if (!LoggingCache.class.isAssignableFrom(cache.getClass())) {
             cache = new LoggingCache(cache);
         }
@@ -142,7 +164,7 @@ public class CacheBuilder {
     }
 
     /**
-     * 设置默认实现类
+     * 如果{@link #implementation}是null，设置为{@link PerpetualCache}.class；如果{@link #decorators}是空的，添加一个元素{@link LruCache}.class
      */
     private void setDefaultImplementations() {
         if (implementation == null) {
@@ -153,27 +175,48 @@ public class CacheBuilder {
         }
     }
 
+    /**
+     * 设置标准的包装器：
+     * <ol>
+     *     <li>
+     *         如果{@link #size}不为null并且使用{@link SystemMetaObject#forObject(Object)}包装{@code cache}之后调用{@link MetaObject#hasSetter(String)}查询该{@code cache}对象是否存在"size"属性，如果存在，则直接将size设置给它
+     *     </li>
+     *     <li>
+     *         如果{@link #clearInterval}不为null，则使用{@link ScheduledCache}包装{@code cache}，并调用{@link ScheduledCache#setClearInterval(long)}设置{@link #clearInterval}
+     *     </li>
+     *     <li>
+     *         如果{@link #readWrite}不为null，则使用{@link SerializedCache}包装{@code cache}
+     *     </li>
+     *     <li>
+     *         使用{@link LoggingCache}包装{@code cache}
+     *     </li>
+     *     <li>
+     *         使用{@link SynchronizedCache}包装{@code cache}
+     *     </li>
+     *     <li>
+     *         如果{@link #blocking}是true，则使用{@link BlockingCache}包装{@code cache}
+     *     </li>
+     * </ol>
+     * 返回{@code cache}
+     *
+     * @param cache
+     * @return
+     */
     private Cache setStandardDecorators(Cache cache) {
         try {
-            // 如果有 size 方法，则进行设置
             MetaObject metaCache = SystemMetaObject.forObject(cache);
             if (size != null && metaCache.hasSetter("size")) {
                 metaCache.setValue("size", size);
             }
-            // 包装成 ScheduledCache 对象
             if (clearInterval != null) {
                 cache = new ScheduledCache(cache);
                 ((ScheduledCache) cache).setClearInterval(clearInterval);
             }
-            // 包装成 SerializedCache 对象
             if (readWrite) {
                 cache = new SerializedCache(cache);
             }
-            // 包装成 LoggingCache 对象
             cache = new LoggingCache(cache);
-            // 包装成 SynchronizedCache 对象
             cache = new SynchronizedCache(cache);
-            // 包装成 BlockingCache 对象
             if (blocking) {
                 cache = new BlockingCache(cache);
             }
@@ -183,9 +226,23 @@ public class CacheBuilder {
         }
     }
 
+    /**
+     * <ol>
+     *     <li>
+     *          如果{@link #properties}不为null，则对其进行遍历，使用{@link SystemMetaObject#forObject(Object)}对{@code cache}封装成一个{@link MetaObject}对象，
+     *          调用其{@link MetaObject#hasSetter(String)}和{@link MetaObject#getSetterType(String)}判断该{@link Cache}对象是否拥有该property以及该property类型
+     *          是否为String、int、long、short、byte、float、boolean、double。如果拥有该property并且类型正确是则设置给该{@link Cache}对象；如果没有该property则什么都不做；
+     *          如果该property类型不正确则抛出异常。
+     *     </li>
+     *     <li>
+     *         然后检查{@code cache}是否实现了{@link InitializingObject}，如果是则对其调用其所实现的{@link InitializingObject#initialize()}方法
+     *     </li>
+     * </ol>
+     *
+     * @param cache
+     */
     private void setCacheProperties(Cache cache) {
         if (properties != null) {
-            // 初始化 Cache 对象的属性
             MetaObject metaCache = SystemMetaObject.forObject(cache);
             for (Map.Entry<Object, Object> entry : properties.entrySet()) {
                 String name = (String) entry.getKey();
@@ -221,7 +278,6 @@ public class CacheBuilder {
                 }
             }
         }
-        // 如果实现了 InitializingObject 接口，执行进一步初始化逻辑
         if (InitializingObject.class.isAssignableFrom(cache.getClass())) {
             try {
                 ((InitializingObject) cache).initialize();
@@ -233,17 +289,15 @@ public class CacheBuilder {
     }
 
     /**
-     * 创建基础 Cache 对象
+     * 调用{@link #getBaseCacheConstructor(Class)}获取携带{@link String}类型参数的{@code cacheClass}的构造函数（基础{@link Cache}），并调用{@link Constructor#newInstance(Object...)}传入{@code id}构建一个{@link Cache}对象并返回
      *
      * @param cacheClass Cache 类
      * @param id 编号
      * @return Cache 对象
      */
     private Cache newBaseCacheInstance(Class<? extends Cache> cacheClass, String id) {
-        // 获得 Cache 类的构造方法
         Constructor<? extends Cache> cacheConstructor = getBaseCacheConstructor(cacheClass);
         try {
-            // 创建 Cache 对象
             return cacheConstructor.newInstance(id);
         } catch (Exception e) {
             throw new CacheException("Could not instantiate cache implementation (" + cacheClass + "). Cause: " + e, e);
@@ -251,7 +305,7 @@ public class CacheBuilder {
     }
 
     /**
-     * 获得 Cache 类的构造方法
+     *  return cacheClass.getConstructor(String.class);
      *
      * @param cacheClass Cache 类
      * @return 构造方法
@@ -266,17 +320,15 @@ public class CacheBuilder {
     }
 
     /**
-     * 包装指定 Cache 对象
+     * 调用{@link #getCacheDecoratorConstructor(Class)}获取携带{@link Cache}类型参数的{@code cacheClass}的构造函数（包装{@link Cache}），并调用{@link Constructor#newInstance(Object...)}传入{@code base}对{@code base}进行包装成一个包装{@link Cache}对象并返回
      *
      * @param cacheClass 包装的 Cache 类
      * @param base 被包装的 Cache 对象
      * @return 包装后的 Cache 对象
      */
     private Cache newCacheDecoratorInstance(Class<? extends Cache> cacheClass, Cache base) {
-        // 获得方法参数为 Cache 的构造方法
         Constructor<? extends Cache> cacheConstructor = getCacheDecoratorConstructor(cacheClass);
         try {
-            // 创建 Cache 对象
             return cacheConstructor.newInstance(base);
         } catch (Exception e) {
             throw new CacheException("Could not instantiate cache decorator (" + cacheClass + "). Cause: " + e, e);
@@ -284,7 +336,7 @@ public class CacheBuilder {
     }
 
     /**
-     * 获得方法参数为 Cache 的构造方法
+     *  return cacheClass.getConstructor(Cache.class);
      *
      * @param cacheClass 指定类
      * @return 构造方法

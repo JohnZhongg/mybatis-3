@@ -26,7 +26,6 @@ package org.apache.ibatis.builder;
 public interface InitializingObject {
 
     /**
-     * 初始化对象
      *
      * Initialize a instance.
      * <p>

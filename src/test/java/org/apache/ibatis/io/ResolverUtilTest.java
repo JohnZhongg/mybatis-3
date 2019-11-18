@@ -16,6 +16,7 @@
 package org.apache.ibatis.io;
 
 
+import org.apache.ibatis.type.TypeHandler;
 import org.junit.Test;
 
 import java.util.HashSet;
@@ -44,10 +45,10 @@ public class ResolverUtilTest {
     @Test
     public void findImplementations() throws NoSuchFieldException {
 
-        //ResolverUtil implementations = this.resolverUtil.findImplementations(TypeHandler.class, "org.apache.ibatis.type");
-        //Set classes = implementations.getClasses();
-        //classes.add(Long.class);
-        ////classes.add((Class<ResolverUtil>) BaseTypeHandler.class);
+        ResolverUtil<Long> implementations = this.resolverUtil.findImplementations(TypeHandler.class, "org.apache.ibatis.type");
+        Set classes = implementations.getClasses();
+        classes.add(Integer.class);
+        //classes.add((Class<ResolverUtil>) BaseTypeHandler.class);
         //System.out.println();
 
         A<Long> a = new A<>();

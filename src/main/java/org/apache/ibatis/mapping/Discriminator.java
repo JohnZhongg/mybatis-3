@@ -22,13 +22,16 @@ import java.util.Map;
 
 /**
  * 鉴别器
- *
+ *<pre>
+ *   {@code
  *   <discriminator javaType="int" column="vehicle_type">
  *     <case value="1" resultMap="carResult"/>
  *     <case value="2" resultMap="truckResult"/>
  *     <case value="3" resultMap="vanResult"/>
  *     <case value="4" resultMap="suvResult"/>
  *   </discriminator>
+ *   }
+ *</pre>
  *
  * @author Clinton Begin
  */
@@ -53,16 +56,37 @@ public class Discriminator {
 
         private Discriminator discriminator = new Discriminator();
 
+        /**
+         * 设置{@code resultMapping}和{@code discriminatorMap}到成员{@link #discriminator}的{@link Discriminator#resultMapping}和{@link Discriminator#discriminatorMap}
+         *
+         * @param configuration
+         * @param resultMapping
+         * @param discriminatorMap
+         */
         public Builder(Configuration configuration, ResultMapping resultMapping, Map<String, String> discriminatorMap) {
             discriminator.resultMapping = resultMapping;
             discriminator.discriminatorMap = discriminatorMap;
         }
 
+        /**
+         * <ol>
+         *     <li>
+         *         assert 成员变量{@link #discriminator}的{@link Discriminator#resultMapping}不为null、{@link Discriminator#discriminatorMap}不为null也不empty
+         *     </li>
+         *     <li>
+         *         将成员变量{@link #discriminator}的{@link Discriminator#discriminatorMap}利用{@link Collections#unmodifiableMap(Map)}转为不可更改的{@link Map}
+         *     </li>
+         *     <li>
+         *         返回成员变量{@link #discriminator}
+         *     </li>
+         * </ol>
+         *
+         * @return
+         */
         public Discriminator build() {
             assert discriminator.resultMapping != null;
             assert discriminator.discriminatorMap != null;
             assert !discriminator.discriminatorMap.isEmpty();
-            // lock down map 生成不可变集合，避免修改
             discriminator.discriminatorMap = Collections.unmodifiableMap(discriminator.discriminatorMap);
             return discriminator;
         }
