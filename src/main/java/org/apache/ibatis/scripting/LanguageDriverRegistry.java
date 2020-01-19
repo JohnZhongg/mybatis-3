@@ -89,6 +89,11 @@ public class LanguageDriverRegistry {
         return getDriver(getDefaultDriverClass());
     }
 
+    /**
+     * 返回默认的{@link LanguageDriver}的{@link Class}对象{@link #defaultDriverClass}
+     *
+     * @return
+     */
     public Class<? extends LanguageDriver> getDefaultDriverClass() {
         return defaultDriverClass;
     }

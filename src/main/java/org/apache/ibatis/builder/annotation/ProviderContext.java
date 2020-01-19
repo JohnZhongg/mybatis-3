@@ -28,11 +28,11 @@ import java.lang.reflect.Method;
 public final class ProviderContext {
 
     /**
-     * Mapper 接口
+     * 定义了Provider注解的Mapper接口的{@link Class}对象
      */
     private final Class<?> mapperType;
     /**
-     * Mapper 的方法
+     * 定义了Provider注解的Mapper方法的{@link Method}对象
      */
     private final Method mapperMethod;
 

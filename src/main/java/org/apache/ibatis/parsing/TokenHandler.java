@@ -23,7 +23,7 @@ package org.apache.ibatis.parsing;
 public interface TokenHandler {
 
     /**
-     * 处理 Token
+     * 处理 Token (本接口方法只是定义了如何处理Token中的内容，如何识别Token的逻辑并不在本方法内，应该是先进行了识别Token的逻辑并取出Token之后再调用本方法进行Token的处理，如何识别Token参考{@link GenericTokenParser#parse(String)})
      *
      * @param content Token 字符串
      * @return 处理后的结果

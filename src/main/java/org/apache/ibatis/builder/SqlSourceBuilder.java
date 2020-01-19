@@ -16,13 +16,17 @@
 package org.apache.ibatis.builder;
 
 import org.apache.ibatis.mapping.ParameterMapping;
+import org.apache.ibatis.mapping.ParameterMode;
 import org.apache.ibatis.mapping.SqlSource;
 import org.apache.ibatis.parsing.GenericTokenParser;
 import org.apache.ibatis.parsing.TokenHandler;
 import org.apache.ibatis.reflection.MetaClass;
 import org.apache.ibatis.reflection.MetaObject;
+import org.apache.ibatis.reflection.ReflectorFactory;
+import org.apache.ibatis.scripting.xmltags.DynamicContext;
 import org.apache.ibatis.session.Configuration;
 import org.apache.ibatis.type.JdbcType;
+import org.apache.ibatis.type.TypeHandler;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -37,69 +41,210 @@ public class SqlSourceBuilder extends BaseBuilder {
 
     private static final String parameterProperties = "javaType,jdbcType,mode,numericScale,resultMap,typeHandler,jdbcTypeName";
 
+    /**
+     * 调用父构造方法{@link BaseBuilder#BaseBuilder(Configuration)}传入{@code configuration}
+     *
+     * @param configuration
+     */
     public SqlSourceBuilder(Configuration configuration) {
         super(configuration);
     }
 
     /**
      * 执行解析原始 SQL ，成为 SqlSource 对象
+     * <ol>
+     *     <li>
+     *         调用{@link ParameterMappingTokenHandler#ParameterMappingTokenHandler(Configuration, Class, Map)}传入{@link #configuration}、{@code parameterType}、{@code additionalParameters}实例化一个"#{}"Token处理器{@link ParameterMappingTokenHandler}对象（解析除一个{@link ParameterMapping}对象以及在对应的sql字符串中替换该Token为"?"）
+     *     </li>
+     *     <li>
+     *         调用{@link GenericTokenParser#GenericTokenParser(String, String, TokenHandler)}传入"${"、"}"、第一步得到的"#{}"Token处理器对象{@link ParameterMappingTokenHandler}对象 得到一个完整的"#{}"Token解析器
+     *     </li>
+     *     <li>
+     *         调用{@link GenericTokenParser#parse(String)}传入{@code originalSql}进行sql解析，返回的结果是一个将"#{}"替换成"?"的sql字符串
+     *     </li>
+     *     <li>
+     *         调用构造器{@link StaticSqlSource#StaticSqlSource(Configuration, String, List)}传入 {@link #configuration}、第三步得到的sql字符串、经过第三步的处理之后的第一步new的{@link ParameterMappingTokenHandler}对象的{@link ParameterMappingTokenHandler#getParameterMappings()} 三个参数构造一个{@link StaticSqlSource}对象并返回，本方法结束
+     *     </li>
+     * </ol>
      *
-     * @param originalSql 原始 SQL
-     * @param parameterType 参数类型
-     * @param additionalParameters 附加参数集合。可能是空集合，也可能是 {@link org.apache.ibatis.scripting.xmltags.DynamicContext#bindings} 集合
+     * @param originalSql 处理了动态sql（含有mybatis sql标签和"${}"token的{@code <select/>}、{@code <update/>}、{@code <delete/>}、{@code <update/>}、{@code <selectKey/>}标签）之后构建出来的一条还含有"#{}"Token的完整sql（经过了{@link org.apache.ibatis.scripting.xmltags.SqlNode#apply(DynamicContext)}的{@link DynamicContext#getSql()}）
+     * @param parameterType 承载了sql参数值的对象的类型（如果对象是null则是{@link Object}.class）（{@link DynamicContext#bindings}["_parameter"].getClass()）
+     * @param additionalParameters 附加参数集合。 {@link DynamicContext#getBindings()} （可能是空集合）
      * @return SqlSource 对象
      */
     public SqlSource parse(String originalSql, Class<?> parameterType, Map<String, Object> additionalParameters) {
-        // 创建 ParameterMappingTokenHandler 对象
         ParameterMappingTokenHandler handler = new ParameterMappingTokenHandler(configuration, parameterType, additionalParameters);
-        // 创建 GenericTokenParser 对象
         GenericTokenParser parser = new GenericTokenParser("#{", "}", handler);
-        // 执行解析
         String sql = parser.parse(originalSql);
-        // 创建 StaticSqlSource 对象
         return new StaticSqlSource(configuration, sql, handler.getParameterMappings());
     }
 
     private static class ParameterMappingTokenHandler extends BaseBuilder implements TokenHandler {
 
         /**
-         * ParameterMapping 数组
+         * {@link ParameterMapping} 集合（一个"#{}"Token会有一个{@link ParameterMapping}对象元素）
          */
         private List<ParameterMapping> parameterMappings = new ArrayList<>();
         /**
-         * 参数类型
+         * 承载了sql参数值的对象的类型（如果对象是null则是{@link Object}.class）（{@link DynamicContext#bindings}["_parameter"].getClass()）
          */
         private Class<?> parameterType;
         /**
-         * additionalParameters 参数的对应的 MetaObject 对象
+         * {@link DynamicContext#getBindings()}对应的 {@link MetaObject} 对象
          */
         private MetaObject metaParameters;
 
+        /**
+         * <ol>
+         *     <li>
+         *         调用父构造器{@link BaseBuilder#BaseBuilder(Configuration)}传入{@code configuration}构造父对象
+         *     </li>
+         *     <li>
+         *         {@code parameterType}赋值到{@link #parameterType}
+         *     </li>
+         *     <li>
+         *         调用{@code configuration}的{@link Configuration#newMetaObject(Object)}传入{@code additionalParameters}构建其对应的{@link MetaObject}对象赋值到{@link #metaParameters}
+         *     </li>
+         * </ol>
+         *
+         * @param configuration 全局的{@link Configuration}对象
+         * @param parameterType 承载了sql参数值的对象的类型（如果对象是null则是{@link Object}.class）（{@link DynamicContext#bindings}["_parameter"].getClass()）
+         * @param additionalParameters 附加参数集合。 {@link DynamicContext#getBindings()} （可能是空集合）
+         */
         public ParameterMappingTokenHandler(Configuration configuration, Class<?> parameterType, Map<String, Object> additionalParameters) {
             super(configuration);
             this.parameterType = parameterType;
-            // 创建 additionalParameters 参数的对应的 MetaObject 对象
             this.metaParameters = configuration.newMetaObject(additionalParameters);
         }
 
+        /**
+         * @return {@link #parameterMappings}
+         */
         public List<ParameterMapping> getParameterMappings() {
             return parameterMappings;
         }
 
+        /**
+         * <ol>
+         *     <li>
+         *         调用{@link #buildParameterMapping(String)}传入{@code content}针对一个当前Token构建一个{@link ParameterMapping}对象，然后添加到{@link #parameterMappings}中
+         *     </li>
+         *     <li>
+         *         返回"?"字符串，替换sql中的"#{xxxx}"
+         *     </li>
+         * </ol>
+         *
+         * @param content Token 字符串 （"#{}"中的内容）
+         * @return
+         */
         @Override
         public String handleToken(String content) {
-            // 构建 ParameterMapping 对象，并添加到 parameterMappings 中
             parameterMappings.add(buildParameterMapping(content));
-            // 返回 ? 占位符
             return "?";
         }
 
+        /**
+         * TODO
+         * <ol>
+         *     <li>
+         *         调用{@link #parseParameterMapping(String)}传入{@code content}对Token字符串进行解析得到一个{@link ParameterExpression}对象
+         *     </li>
+         *     <li>
+         *         获取mybatis自动识别的属性java类型（就是缺省值）"propertyType"：
+         *         <ul>
+         *             调用{@link ParameterExpression#get(Object)}传入"property"获取对应的字符串，对于获取到的字符串进行如下判断和操作：
+         *             <li>
+         *                 调用{@link #metaParameters}的{@link MetaObject#hasGetter(String)}传入"property"对应的字符串返回结果为true：调用{@link #metaParameters}的{@link MetaObject#getGetterType(String)}传入"property"对应的字符串得到当前"#{}"Token中定义的属性的类型{@link Class}对象然后赋值到变量"propertyType"中，步骤2结束，进入步骤3；否则进入步骤2下一判断
+         *             </li>
+         *             <li>
+         *                 调用{@link #typeHandlerRegistry}的{@link org.apache.ibatis.type.TypeHandlerRegistry#hasTypeHandler(Class)}传入{@link #parameterType}返回结果为true：赋值{@link #parameterType}到变量"propertyType"中，步骤2结束，进入步骤3；否则进入步骤2下一判断
+         *             </li>
+         *             <li>
+         *                 调用{@link JdbcType#CURSOR}的{@link JdbcType#name()}（"CURSOR"），然后调用得到的字符串的{@link String#equals(Object)}传入从第一步得到的{@link ParameterExpression}的{@link ParameterExpression#get(Object)}中获取到的"jdbcType"对应的字符串返回true：赋值{@link java.sql.ResultSet}.class到变量"propertyType"，步骤2结束，进入步骤3；否则进入步骤2下一判断
+         *             </li>
+         *             <li>
+         *                 如果从{@link ParameterExpression#get(Object)}获取的"property"对应的字符串为null 或者 {@link Map}.class的{@link Class#isAssignableFrom(Class)}传入{@link #parameterType}为true：{@link Object}.class赋值到变量"propertyType"，步骤2结束，进入步骤3；否则进入步骤2下一判断
+         *             </li>
+         *             <li>
+         *                 来到这里，所有操作都是必然执行的：
+         *                 <ol>
+         *                     <li>
+         *                         调用{@link MetaClass#forClass(Class, ReflectorFactory)}传入{@link #parameterType}、{@link #configuration}的{@link Configuration#getReflectorFactory()} 两个参数构建{@link #parameterType}.getClass()的{@link MetaClass}对象
+         *                     </li>
+         *                     <li>
+         *                         调用{@link MetaClass#hasGetter(String)}传入从{@link ParameterExpression#get(Object)}获取的"property"对应的字符串，判断返回结果是否为true：
+         *                         <ul>
+         *                             <li>
+         *                                 true：调用{@link MetaClass#getGetterType(String)}传入从{@link ParameterExpression#get(Object)}获取的"property"对应的字符串得到的结果赋值到变量"propertyType"，步骤2结束，进入步骤3
+         *                             </li>
+         *                             <li>
+         *                                 false：赋值{@link Object}.class到变量"propertyType"，步骤2结束，进入步骤3
+         *                             </li>
+         *                         </ul>
+         *                     </li>
+         *                 </ol>
+         *             </li>
+         *         </ul>
+         *     </li>
+         *     <li>
+         *         调用{@link ParameterMapping.Builder#Builder(Configuration, String, Class)}传入{@link #configuration}、从{@link ParameterExpression#get(Object)}获取的"property"对应的字符串、第二步骤获取到的属性java类型缺省值 三个参数构建一个{@link ParameterMapping.Builder}对象
+         *     </li>
+         *     <li>
+         *         处理{@link ParameterExpression}中"property"之外的value：
+         *         <ol>
+         *             遍历迭代{@link ParameterExpression#entrySet()}，对于每一个迭代的{@link java.util.Map.Entry}对象：
+         *             <li>
+         *                 调用{@link Map.Entry#getKey()}得到当前迭代元素的key赋值到变量"name"、调用{@link Map.Entry#getValue()}得到当前迭代元素的key赋值到变量"value"
+         *             </li>
+         *             <li>
+         *                 对前面得到的"name"变量和"value"变量作以下判断和操作：
+         *                 <ul>
+         *                     <li>
+         *                         如果 字符串"javaType".equals("name"变量)：调用{@link BaseBuilder#resolveClass(String)}传入"value"变量得到的结果再传入到方法调用{@link org.apache.ibatis.mapping.ParameterMapping.Builder#javaType(Class)}，覆盖前面自动识别的缺省值，本迭代结束，进入下一循环迭代；否则什么也不做，进入下一判断
+         *                     </li>
+         *                     <li>
+         *                         如果 字符串"jdbcType".equals("name"变量)：调用{@link BaseBuilder#resolveJdbcType(String)}传入"value"变量得到的结果再传入到方法调用{@link org.apache.ibatis.mapping.ParameterMapping.Builder#jdbcType(JdbcType)}，本迭代结束，进入下一循环迭代；否则什么也不做，进入下一判断
+         *                     </li>
+         *                     <li>
+         *                         如果 字符串"mode".equals("name"变量)：调用{@link BaseBuilder#resolveParameterMode(String)} 传入"value"变量得到的结果再传入到方法调用{@link org.apache.ibatis.mapping.ParameterMapping.Builder#mode(ParameterMode)}，本迭代结束，进入下一循环迭代；否则什么也不做，进入下一判断
+         *                     </li>
+         *                     <li>
+         *                         如果 字符串"numericScale".equals("name"变量)：调用{@link Integer#valueOf(String)} 传入"value"变量得到的结果再传入到方法调用{@link org.apache.ibatis.mapping.ParameterMapping.Builder#numericScale(Integer)}，本迭代结束，进入下一循环迭代；否则什么也不做，进入下一判断
+         *                     </li>
+         *                     <li>
+         *                         如果 字符串"resultMap".equals("name"变量)：直接传入"value"变量到方法调用{@link org.apache.ibatis.mapping.ParameterMapping.Builder#resultMapId(String)} ，本迭代结束，进入下一循环迭代；否则什么也不做，进入下一判断
+         *                     </li>
+         *                     <li>
+         *                         如果 字符串"typeHandler".equals("name"变量)：调用{@link BaseBuilder#resolveTypeHandler(Class, String)}传入"第二步中mybatis自动识别的"javaType"缺省值或者第一个判断中用户自定义的值"、"value"变量 两个参数解析对应的{@link org.apache.ibatis.type.TypeHandler}对象，然后再传入到方法调用{@link org.apache.ibatis.mapping.ParameterMapping.Builder#typeHandler(TypeHandler)} ，本迭代结束，进入下一循环迭代；否则什么也不做，进入下一判断
+         *                     </li>
+         *                     <li>
+         *                         如果 字符串"jdbcTypeName".equals("name"变量)：直接传入"value"变量到方法调用{@link org.apache.ibatis.mapping.ParameterMapping.Builder#jdbcTypeName(String)} ，本迭代结束，进入下一循环迭代；否则什么也不做，进入下一判断
+         *                     </li>
+         *                     <li>
+         *                         如果 字符串"property".equals("name"变量)：什么也不做，进入下一循环迭代（第二步已经处理了）
+         *                     </li>
+         *                     <li>
+         *                         如果 字符串"expression".equals("name"变量)：抛出异常{@link BuilderException}("Expression based parameters are not supported yet")；否则什么也不做，进入下一判断
+         *                     </li>
+         *                     <li>
+         *                         来到这里，直接抛出异常{@link BuilderException}【#{}中只能有以下自定义内容（{@link ParameterExpression}的"attributes"部分）：javaType,jdbcType,mode,numericScale,resultMap,typeHandler,jdbcTypeName】
+         *                     </li>
+         *                 </ul>
+         *             </li>
+         *         </ol>
+         *     </li>
+         *     <li>
+         *         上述处理完成之后，调用{@link ParameterMapping.Builder#build()}方法构建一个{@link ParameterMapping}对象并返回，本方法结束
+         *     </li>
+         * </ol>
+         *
+         * @param content Token 字符串 （"#{}"中的内容）
+         * @return
+         */
         private ParameterMapping buildParameterMapping(String content) {
-            // 解析成 Map 集合
             Map<String, String> propertiesMap = parseParameterMapping(content);
-            // 获得属性的名字和类型
-            String property = propertiesMap.get("property"); // 名字
-            Class<?> propertyType; // 类型
+            String property = propertiesMap.get("property");
+            Class<?> propertyType;
             if (metaParameters.hasGetter(property)) { // issue #448 get type from additional params
                 propertyType = metaParameters.getGetterType(property);
             } else if (typeHandlerRegistry.hasTypeHandler(parameterType)) {
@@ -116,9 +261,7 @@ public class SqlSourceBuilder extends BaseBuilder {
                     propertyType = Object.class;
                 }
             }
-            // 创建 ParameterMapping.Builder 对象
             ParameterMapping.Builder builder = new ParameterMapping.Builder(configuration, property, propertyType);
-            // 初始化 ParameterMapping.Builder 对象的属性
             Class<?> javaType = propertyType;
             String typeHandlerAlias = null;
             for (Map.Entry<String, String> entry : propertiesMap.entrySet()) {
@@ -147,14 +290,18 @@ public class SqlSourceBuilder extends BaseBuilder {
                     throw new BuilderException("An invalid property '" + name + "' was found in mapping #{" + content + "}.  Valid properties are " + parameterProperties);
                 }
             }
-            // 如果 typeHandlerAlias 非空，则获得对应的 TypeHandler 对象，并设置到 ParameterMapping.Builder 对象中
             if (typeHandlerAlias != null) {
                 builder.typeHandler(resolveTypeHandler(javaType, typeHandlerAlias));
             }
-            // 创建 ParameterMapping 对象
             return builder.build();
         }
 
+        /**
+         * 尝试调用{@link ParameterExpression#ParameterExpression(String)}传入{@code content}对Token字符串进行解析得到一个{@link ParameterExpression}对象
+         *
+         * @param content Token 字符串 （"#{}"中的内容）
+         * @return 一个{@link ParameterExpression}对象
+         */
         private Map<String, String> parseParameterMapping(String content) {
             try {
                 return new ParameterExpression(content);

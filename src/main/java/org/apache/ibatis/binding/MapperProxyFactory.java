@@ -17,39 +17,76 @@ package org.apache.ibatis.binding;
 
 import org.apache.ibatis.session.SqlSession;
 
+import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Mapper Proxy 工厂类
+ * {@link MapperProxy} 工厂类（创建mapper的代理对象）
  *
  * @author Lasse Voss
  */
 public class MapperProxyFactory<T> {
 
     /**
-     * Mapper 接口 Class对象
+     * Mapper接口的{@link Class}对象
      */
     private final Class<T> mapperInterface;
     /**
-     * 方法与 MapperMethod 的映射
+     * 真实{@link Method}和{@link MapperMethod}的映射
      */
     private final Map<Method, MapperMethod> methodCache = new ConcurrentHashMap<>();
 
+    /**
+     * {@code mapperInterface}赋值到{@link #mapperInterface}
+     *
+     * @param mapperInterface Mapper接口的{@link Class}对象
+     */
     public MapperProxyFactory(Class<T> mapperInterface) {
         this.mapperInterface = mapperInterface;
     }
 
+    /**
+     * @return {@link #mapperInterface}
+     */
     public Class<T> getMapperInterface() {
         return mapperInterface;
     }
 
+    /**
+     * @return {@link #methodCache}
+     */
     public Map<Method, MapperMethod> getMethodCache() {
         return methodCache;
     }
 
+    /**
+     * <ol>
+     *     <li>
+     *         接收一个mapper的{@link java.lang.reflect.InvocationHandler}（该类用于jdk提供的动态代理流程中，提供在拦截了要被代理的对象的方法之后要执行的步骤）实现类对象（{@link MapperProxy}）
+     *     </li>
+     *     <li>
+     *         然后调用{@link Proxy#newProxyInstance(ClassLoader, Class[], InvocationHandler)}传入
+     *         <ol>
+     *             <li>
+     *                 {@link #mapperInterface}的{@link Class#getClassLoader()}
+     *             </li>
+     *             <li>
+     *                 new Class[]{{@link #mapperInterface}}  （用于jdk提供的动态代理流程中声明要被代理的接口，即声明代理对象要可以拥有或者代理哪些行为）
+     *             </li>
+     *             <li>
+     *                 第一步接收到的{@link MapperProxy}对象
+     *             </li>
+     *         </ol>
+     *         三个参数构建一个代理对象进行返回，对象类型为{@link #mapperInterface}的泛型
+     *     </li>
+     * </ol>
+     *
+     * @param mapperProxy mapper的{@link java.lang.reflect.InvocationHandler}实现类对象
+     * @return
+     */
     @SuppressWarnings("unchecked")
     protected T newInstance(MapperProxy<T> mapperProxy) {
         return (T) Proxy.newProxyInstance(mapperInterface.getClassLoader(), new Class[]{mapperInterface}, mapperProxy);

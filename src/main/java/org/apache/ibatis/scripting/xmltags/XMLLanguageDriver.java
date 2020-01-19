@@ -27,6 +27,9 @@ import org.apache.ibatis.scripting.LanguageDriver;
 import org.apache.ibatis.scripting.defaults.DefaultParameterHandler;
 import org.apache.ibatis.scripting.defaults.RawSqlSource;
 import org.apache.ibatis.session.Configuration;
+import org.xml.sax.EntityResolver;
+
+import java.util.Properties;
 
 /**
  * XML 语言驱动实现类
@@ -41,32 +44,80 @@ public class XMLLanguageDriver implements LanguageDriver {
         return new DefaultParameterHandler(mappedStatement, parameterObject, boundSql);
     }
 
+    /**
+     * 根据{@link XNode}对象{@code script}创建{@link SqlSource}对象
+     * <ol>
+     *     <li>
+     *         调用构造器{@link XMLScriptBuilder#XMLScriptBuilder(Configuration, XNode, Class)}传入{@code configuration}、{@code script}、{@code parameterType}构建一个{@link XMLScriptBuilder}对象
+     *     </li>
+     *     <li>
+     *         调用{@link XMLScriptBuilder#parseScriptNode()}得到一个{@link SqlSource}对象并返回，本方法结束
+     *     </li>
+     * </ol>
+     *
+     * @param configuration The MyBatis configuration
+     * @param script        XNode parsed from a XML file （{@code <select/>}、{@code <update/>}、{@code <delete/>}、{@code <select/>}、{@code <selectKey/>}等标签对应的{@link XNode}对象）
+     * @param parameterType input parameter type got from a mapper method or specified in the parameterType xml attribute. Can be null.({@code <select/>}、{@code <update/>}、{@code <delete/>}、{@code <select/>}等标签才有的"parameterType"属性，如果是{@code <selectKey/>}标签该参数则取自外层标签{@code <insert/>}或者{@code <update/>}的"parameterType"属性)
+     * @return
+     */
     @Override
     public SqlSource createSqlSource(Configuration configuration, XNode script, Class<?> parameterType) {
-        // 创建 XMLScriptBuilder 对象，执行解析
         XMLScriptBuilder builder = new XMLScriptBuilder(configuration, script, parameterType);
         return builder.parseScriptNode();
     }
 
+    /**
+     * <ul>
+     *     判断：{@code script}.startWith("{@code <script>}")
+     *     <li>
+     *         true：
+     *         <ol>
+     *             <li>
+     *                 调用构造器{@link XPathParser#XPathParser(String, boolean, Properties, EntityResolver)}传入{@code script}、false、{@link Configuration#getVariables()}、new 一个{@link XMLMapperEntityResolver}对象 共四个参数构建一个{@link XPathParser}对象
+     *             </li>
+     *             <li>
+     *                 调用{@link XPathParser#evalNode(String)}传入"/script"解析得到对应的{@link XNode}对象，然后调用{@link #createSqlSource(Configuration, XNode, Class)}传入{@code configuration}、前面得到的{@link XNode}对象、{@code parameterTyp} 共三个参数重用xml的方法进行{@link SqlSource}对象构建并返回，本方法结束
+     *             </li>
+     *         </ol>
+     *     </li>
+     *     <li>
+     *         false：
+     *         <ol>
+     *             <li>
+     *                 调用{@link PropertyParser#parse(String, Properties)}传入{@code script}和{@link Configuration#getVariables()}两个参数，对{@code script}中含有的"${}"token进行变量替换
+     *             </li>
+     *             <li>
+     *                 调用构造器{@link TextSqlNode#TextSqlNode(String)}传入变量替换后的{@code script}构建一个{@link TextSqlNode}对象，然后调用{@link TextSqlNode#isDynamic()}判断是否包含"#{}"：
+     *                 <ul>
+     *                     <li>
+     *                         包含：调用构造器{@link DynamicSqlSource#DynamicSqlSource(Configuration, SqlNode)}传入{@code configuration}、前面构建的{@link TextSqlNode}构建一个{@link DynamicSqlSource}对象并返回，本方法结束
+     *                     </li>
+     *                     <li>
+     *                         不包含：调用构造器{@link RawSqlSource#RawSqlSource(Configuration, String, Class)}传入{@code configuration}、{@code script}、{@code parameterType}构建一个{@link RawSqlSource}对象并返回，本方法结束
+     *                     </li>
+     *                 </ul>
+     *             </li>
+     *         </ol>
+     *     </li>
+     * </ul>
+     *
+     * @param configuration The MyBatis configuration
+     * @param script        The content of the annotation
+     * @param parameterType input parameter type got from a mapper method or specified in the parameterType xml attribute. Can be null.
+     * @return
+     */
     @Override
     public SqlSource createSqlSource(Configuration configuration, String script, Class<?> parameterType) {
         // issue #3
-        // 如果是 <script> 开头，使用 XML 配置的方式，使用动态 SQL
         if (script.startsWith("<script>")) {
-            // 创建 XPathParser 对象，解析出 <script /> 节点
             XPathParser parser = new XPathParser(script, false, configuration.getVariables(), new XMLMapperEntityResolver());
-            // 调用上面的 #createSqlSource(...) 方法，创建 SqlSource 对象
             return createSqlSource(configuration, parser.evalNode("/script"), parameterType);
         } else {
             // issue #127
-            // 变量替换
             script = PropertyParser.parse(script, configuration.getVariables());
-            // 创建 TextSqlNode 对象
             TextSqlNode textSqlNode = new TextSqlNode(script);
-            // 如果是动态 SQL ，则创建 DynamicSqlSource 对象
             if (textSqlNode.isDynamic()) {
                 return new DynamicSqlSource(configuration, textSqlNode);
-            // 如果非动态 SQL ，则创建 RawSqlSource 对象
             } else {
                 return new RawSqlSource(configuration, script, parameterType);
             }

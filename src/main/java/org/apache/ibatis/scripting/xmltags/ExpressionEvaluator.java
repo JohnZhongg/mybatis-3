@@ -24,52 +24,130 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * OGNL 表达式计算器
+ * OGNL 表达式计算器（转换器）
  *
  * @author Clinton Begin
  */
 public class ExpressionEvaluator {
 
     /**
-     * 判断表达式对应的值，是否为 true
+     * 判断表达式对应的值并转换为布尔值
+     * <ol>
+     *     <li>
+     *         调用{@link OgnlCache#getValue(String, Object)}传入{@code expression}和{@code parameterObject}获取对应的对象
+     *     </li>
+     *     <li>
+     *         判断如果该对象 instanceof {@link Boolean}，直接强转该对象为 {@link Boolean} 并返回，本方法结束；否则什么也不做，继续往下走
+     *     </li>
+     *     <li>
+     *         如果如果该对象 instanceof {@link Number}：
+     *         <ul>
+     *             <li>
+     *                 是则：return new {@link BigDecimal}(String.valueOf(value)).compareTo({@link BigDecimal#ZERO}) != 0;（即判断其是否不为0，是就返回true；否则返回false。本方法结束）
+     *             </li>
+     *             <li>
+     *                 否则：什么也不做，继续往下走
+     *             </li>
+     *         </ul>
+     *     </li>
+     *     <li>
+     *         来到这里，直接 return value != null;（即该对象为null则返回false，不为null则返回true。结束）
+     *     </li>
+     * </ol>
      *
-     * @param expression 表达式
-     * @param parameterObject 参数对象
+     * @param expression OGNL表达式
+     * @param parameterObject 表达式解析的对象，应该是{@link DynamicContext#bindings}
      * @return 是否为 true
      */
     public boolean evaluateBoolean(String expression, Object parameterObject) {
-        // 获得表达式对应的值
         Object value = OgnlCache.getValue(expression, parameterObject);
-        // 如果是 Boolean 类型，直接判断
         if (value instanceof Boolean) {
             return (Boolean) value;
         }
-        // 如果是 Number 类型，则判断不等于 0
         if (value instanceof Number) {
             return new BigDecimal(String.valueOf(value)).compareTo(BigDecimal.ZERO) != 0;
         }
-        // 如果是其它类型，判断非空
         return value != null;
     }
 
     /**
-     * 获得表达式对应的集合
+     * 获得OGNL表达式对应的集合，并做一些检查和转换
+     * <ol>
+     *     <li>
+     *         调用{@link OgnlCache#getValue(String, Object)}传入{@code expression}和{@code parameterObject}获取对应的对象
+     *     </li>
+     *     <li>
+     *         判断如果该对象 == null：true则抛出异常{@link BuilderException}；false则什么也不做，继续往下走
+     *     </li>
+     *     <li>
+     *         判断如果该对象 instanceof {@link Iterable}：true则直接强转该对象为{@link Iterable}并返回；否则什么也不做，继续往下走
+     *     </li>
+     *     <li>
+     *         判断如果该对象.getClass().isArray()（是一个数组）：
+     *         <ul>
+     *             <li>
+     *                 true则：
+     *                 <ol>
+     *                     <li>
+     *                         new 一个{@link ArrayList}对象
+     *                     </li>
+     *                     <li>
+     *                         调用{@link Array#getLength(Object)}传入该对象，获取数组长度；调用{@link Array#get(Object, int)}传入该数组和对应的indes获取指定的数组元素。根据这两个api遍历数组中的元素并全部添加到
+     *                         new出来的{@link ArrayList}中
+     *                     </li>
+     *                     <li>
+     *                         return 该{@link ArrayList}对象，本方法结束
+     *                     </li>
+     *                     <li>
+     *                         代码：
+     *                   <pre>
+     *             // the array may be primitive, so Arrays.asList() may throw
+     *             // a ClassCastException (issue 209).  Do the work manually
+     *             // Curse primitives! :) (JGB)
+     *             int size = Array.getLength(value);
+     *             List<{@link Object}> answer = new ArrayList<>();
+     *             for (int i = 0; i < size; i++) {
+     *                 Object o = Array.get(value, i);
+     *                 answer.add(o);
+     *             }
+     *             return answer;
+     *                 </pre>
+     *                     </li>
+     *                 </ol>
+     *             </li>
+     *             <li>
+     *                 false则：什么也不做，继续往下走
+     *             </li>
+     *         </ul>
+     *     </li>
+     *     <li>
+     *         判断该对象 instanceof {@link Map}：
+     *         <ul>
+     *             <li>
+     *                 true则：强转该对象为{@link Map}然后直接返回{@link Map#entrySet()}，本方法结束
+     *             </li>
+     *             <li>
+     *                 false则：什么也不做，继续往下走
+     *             </li>
+     *         </ul>
+     *     </li>
+     *     <li>
+     *         来到这里直接抛出异常{@link BuilderException}
+     *     </li>
+     * </ol>
      *
-     * @param expression 表达式
-     * @param parameterObject 参数对象
+     * @param expression OGNL表达式
+     * @param parameterObject 表达式解析的对象，应该是{@link DynamicContext#bindings}
      * @return 迭代器对象
      */
     public Iterable<?> evaluateIterable(String expression, Object parameterObject) {
-        // 获得表达式对应的值
         Object value = OgnlCache.getValue(expression, parameterObject);
         if (value == null) {
             throw new BuilderException("The expression '" + expression + "' evaluated to a null value.");
         }
-        // 如果是 Iterable 类型，直接返回
         if (value instanceof Iterable) {
             return (Iterable<?>) value;
         }
-        // 如果是数组类型，则返回数组
         if (value.getClass().isArray()) {
             // the array may be primitive, so Arrays.asList() may throw
             // a ClassCastException (issue 209).  Do the work manually
@@ -82,7 +160,6 @@ public class ExpressionEvaluator {
             }
             return answer;
         }
-        // 如果是 Map 类型，则返回 Map.entrySet 集合
         if (value instanceof Map) {
             return ((Map) value).entrySet();
         }

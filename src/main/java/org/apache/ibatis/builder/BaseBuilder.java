@@ -134,7 +134,7 @@ public abstract class BaseBuilder {
     }
 
     /**
-     * 传入{@code alias}为{@link ResultSetType}枚举的名称，如果{@code alias}则返回null，否则调用{@link ResultSetType#valueOf(String)}获取相应的{@link ResultSetType}枚举值对象
+     * 传入{@code alias}为{@link ResultSetType}枚举的名称，如果{@code alias}为null则返回null，否则调用{@link ResultSetType#valueOf(String)}获取相应的{@link ResultSetType}枚举值对象
      *
      * @param alias
      * @return

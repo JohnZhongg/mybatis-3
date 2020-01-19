@@ -24,6 +24,7 @@ import org.apache.ibatis.mapping.*;
 import org.apache.ibatis.reflection.MetaClass;
 import org.apache.ibatis.reflection.ReflectorFactory;
 import org.apache.ibatis.scripting.LanguageDriver;
+import org.apache.ibatis.scripting.LanguageDriverRegistry;
 import org.apache.ibatis.session.Configuration;
 import org.apache.ibatis.type.JdbcType;
 import org.apache.ibatis.type.TypeHandler;
@@ -42,7 +43,7 @@ public class MapperBuilderAssistant extends BaseBuilder {
      */
     private String currentNamespace;
     /**
-     * 资源引用的地址 （一般为java文件路径名：xxx.java (best guess)）
+     * 资源引用的地址 （一般为java文件路径名拼接字符串" (best guess)"："xxx.java (best guess)"（{@link org.apache.ibatis.builder.annotation.MapperAnnotationBuilder#MapperAnnotationBuilder(Configuration, Class)}步骤1和2）或者XML文件路径："xxx.xml"（{@link org.apache.ibatis.builder.xml.XMLMapperBuilder#resource}））
      */
     private final String resource;
     /**
@@ -50,7 +51,8 @@ public class MapperBuilderAssistant extends BaseBuilder {
      */
     private Cache currentCache;
     /**
-     * 当前mapper在xml在设置了{@code <cache-ref namespace="namespace"/>}标签并且声明了namespace属性，但是并没有根据该namespace解析mapper对应的{@link Cache}对象
+     * 没有赋值，new出当前对象的时候是false，即默认值初始化就是false，当当前mapper在xml在设置了{@code <cache-ref namespace="namespace"/>}标签并且声明了namespace属性，最终会调用到本类方法{@link #useCacheRef(String)}，
+     * 该方法如果没有根据该namespace解析出mapper对应的{@link Cache}对象的时候，这个变量会变成true
      */
     private boolean unresolvedCacheRef; // issue #676
 
@@ -141,7 +143,7 @@ public class MapperBuilderAssistant extends BaseBuilder {
      *         如果传入的{@code namespace}是null，直接抛出异常{@link BuilderException}，否则继续
      *     </li>
      *     <li>
-     *         设置{@link #unresolvedCacheRef}为true，并尝试调用{@link Configuration#getCache(String)}获取{@link Cache}对象
+     *         设置{@link #unresolvedCacheRef}为true，并尝试调用{@link Configuration#getCache(String)}传入{@code namespace}获取{@link Cache}对象
      *         <ul>
      *             <li>
      *                 如果获取的{@link Cache}对象是null或者抛出了异常，则抛出异常{@link IncompleteElementException}，<b>注意此时{@link #unresolvedCacheRef}仍为true</b>
@@ -420,7 +422,73 @@ public class MapperBuilderAssistant extends BaseBuilder {
         return new Discriminator.Builder(configuration, resultMapping, namespaceDiscriminatorMap).build();
     }
 
-    // 构建 MappedStatement 对象
+
+    /**
+     * 构建{@link MappedStatement}对象（目前会产生该对象的标签有{@code <selectKey/>}）：
+     * <ol>
+     *     <li>
+     *         判断{@link #unresolvedCacheRef}是否为true：是则抛出异常{@link IncompleteElementException}；否则继续往下走
+     *     </li>
+     *     <li>
+     *         调用{@link #applyCurrentNamespace(String, boolean)}传入{@code id}和false，校验当前id是否属性当前namespace下面
+     *     </li>
+     *     <li>
+     *         调用{@link MappedStatement.Builder#Builder(Configuration, String, SqlSource, SqlCommandType)}传入{@link #configuration}、{@code id}、{@code sqlSource}、{@code sqlCommandType}构建一个{@link MappedStatement.Builder}对象
+     *     </li>
+     *     <li>
+     *         <ul>
+     *             <li>调用{@link MappedStatement.Builder#resource(String)}传入{@link #resource}</li>
+     *             <li>调用{@link MappedStatement.Builder#fetchSize(Integer)}传入{@code fetchSize}</li>
+     *             <li>调用{@link MappedStatement.Builder#timeout(Integer)}传入{@code timeout}</li>
+     *             <li>调用{@link MappedStatement.Builder#statementType(StatementType)}传入{@code statementType}</li>
+     *             <li>调用{@link MappedStatement.Builder#keyGenerator(KeyGenerator)}传入{@code keyGenerator}</li>
+     *             <li>调用{@link MappedStatement.Builder#keyProperty(String)}传入{@code keyProperty}</li>
+     *             <li>调用{@link MappedStatement.Builder#keyColumn(String)}传入{@code keyColumn}</li>
+     *             <li>调用{@link MappedStatement.Builder#databaseId(String)}传入{@code databaseId}</li>
+     *             <li>调用{@link MappedStatement.Builder#lang(LanguageDriver)}传入{@code lang}</li>
+     *             <li>调用{@link MappedStatement.Builder#resultOrdered(boolean)}传入{@code resultOrdered}</li>
+     *             <li>调用{@link MappedStatement.Builder#resultSets(String)}传入{@code resultSets}</li>
+     *             <li>先调用{@link #getStatementParameterMap(String, Class, String)}传入 {@code resultMap}、{@code resultType}、{@code id} 三个参数获取对应的{@link ResultMap}集合，然后调用{@link MappedStatement.Builder#resultMaps(List)}传入获取到的{@link ResultMap}集合</li>
+     *             <li>调用{@link MappedStatement.Builder#resultSetType(ResultSetType)}传入{@code resultSetType}</li>
+     *             <li>先调用{@link #valueOrDefault(Object, Object)}传入{@code flushCache}和"{@code sqlCommandType} != {@link SqlCommandType#SELECT}"（如果没有手动声明该变量，则看当前statement是否为select：不是则为true；是则为false），然后调用{@link MappedStatement.Builder#flushCacheRequired(boolean)}将获得的结果传入</li>
+     *             <li>先调用{@link #valueOrDefault(Object, Object)}传入{@code useCache}和"{@code sqlCommandType} == {@link SqlCommandType#SELECT}"（如果没有手动声明该变量，则看当前statement是否为select：是则为true；不是则为false），然后调用{@link MappedStatement.Builder#useCache(boolean)} 将获得的结果传入</li>
+     *             <li>调用{@link MappedStatement.Builder#cache(Cache)}传入{@link #currentCache}</li>
+     *             <li>先调用{@link #getStatementParameterMap(String, Class, String)}传入 {@code parameterMap}、{@code parameterType}、{@code id} 三个参数获取对应的{@link ParameterMap}对象，然后调用{@link MappedStatement.Builder#parameterMap(ParameterMap)} 传入获取到的{@link ParameterMap}对象</li>
+     *         </ul>
+     *     </li>
+     *     <li>
+     *         调用经过了上面构建好的{@link MappedStatement.Builder}的{@link MappedStatement.Builder#build()}构建（返回其内部的）一个{@link MappedStatement}对象
+     *     </li>
+     *     <li>
+     *         调用{@link #configuration}的{@link Configuration#addMappedStatement(MappedStatement)}传入前一步获得的{@link MappedStatement}对象，添加到{@link Configuration}中
+     *     </li>
+     *     <li>
+     *         return 该{@link MappedStatement}对象，本方法结束
+     *     </li>
+     * </ol>
+     *
+     * @param id {@code <select/>}、{@code <update/>}、{@code <delete/>}、{@code <insert/>}标签的id；如果是{@code <selectKey/>}则是其外围标签{@code <insert/>}或者{@code <update/>}的id拼接上前缀{@link org.apache.ibatis.executor.keygen.SelectKeyGenerator#SELECT_KEY_SUFFIX}
+     * @param sqlSource 对应的{@link SqlSource}对象
+     * @param statementType 标签中的"statementType"属性，对应{@link StatementType}对象
+     * @param sqlCommandType 相应的{@link SqlCommandType}对象
+     * @param fetchSize
+     * @param timeout
+     * @param parameterMap
+     * @param parameterType
+     * @param resultMap
+     * @param resultType
+     * @param resultSetType
+     * @param flushCache
+     * @param useCache
+     * @param resultOrdered
+     * @param keyGenerator
+     * @param keyProperty
+     * @param keyColumn
+     * @param databaseId
+     * @param lang
+     * @param resultSets
+     * @return
+     */
     public MappedStatement addMappedStatement(
             String id,
             SqlSource sqlSource,
@@ -443,16 +511,13 @@ public class MapperBuilderAssistant extends BaseBuilder {
             LanguageDriver lang,
             String resultSets) {
 
-        // 如果只想的 Cache 未解析，抛出 IncompleteElementException 异常
         if (unresolvedCacheRef) {
             throw new IncompleteElementException("Cache-ref not yet resolved");
         }
 
-        // 获得 id 编号，格式为 `${namespace}.${id}`
         id = applyCurrentNamespace(id, false);
         boolean isSelect = sqlCommandType == SqlCommandType.SELECT;
 
-        // 创建 MappedStatement.Builder 对象
         MappedStatement.Builder statementBuilder = new MappedStatement.Builder(configuration, id, sqlSource, sqlCommandType)
                 .resource(resource)
                 .fetchSize(fetchSize)
@@ -471,15 +536,12 @@ public class MapperBuilderAssistant extends BaseBuilder {
                 .useCache(valueOrDefault(useCache, isSelect))
                 .cache(currentCache);
 
-        // 获得 ParameterMap ，并设置到 MappedStatement.Builder 中
         ParameterMap statementParameterMap = getStatementParameterMap(parameterMap, parameterType, id);
         if (statementParameterMap != null) {
             statementBuilder.parameterMap(statementParameterMap);
         }
 
-        // 创建 MappedStatement 对象
         MappedStatement statement = statementBuilder.build();
-        // 添加到 configuration 中
         configuration.addMappedStatement(statement);
         return statement;
     }
@@ -496,7 +558,38 @@ public class MapperBuilderAssistant extends BaseBuilder {
         return value == null ? defaultValue : value;
     }
 
-    // 获得 ParameterMap
+    /**
+     * <ol>
+     *     根据{@code parameterMapName}（prameterMap的id，只能有一个，不像resultMap一样可以用逗号隔开包含多个）、{@code parameterTypeClass}、parameter Type、statement id 获取对应的{@link ParameterMap}对象
+     *     <li>
+     *         调用{@link #applyCurrentNamespace(String, boolean)}传入{@code parameterMapName}和true获取到一个全限定id
+     *     </li>
+     *     <li>
+     *         判断 {@code parameterMapName} != null：
+     *         <ul>
+     *             <li>
+     *                 true：调用{@link #configuration}的{@link Configuration#getParameterMap(String)}传入第一步得到的全限定id尝试获取{@link ParameterMap}对象（该方法获取不到对象会抛出异常），返回该对象，本方法结束。
+     *             </li>
+     *             <li>
+     *                 false：判断 {@code parameterTypeClass} != null：
+     *                 <ul>
+     *                     <li>
+     *                         true：调用{@link ParameterMap.Builder#Builder(Configuration, String, Class, List)}传入  {@link #configuration}、{@code statementId}+"-Inline"（自动拼接的唯一id）、{@code parameterTypeClass}、new 一个{@link ArrayList}对象  共四个参数构建一个{@link ParameterMap.Builder}对象，然后调用{@link ParameterMap.Builder#build()}构建一个{@link ParameterMap}对象，返回该对象，本方法结束。
+     *                     </li>
+     *                     <li>
+     *                         false：返回null，本方法结束
+     *                     </li>
+     *                 </ul>
+     *             </li>
+     *         </ul>
+     *     </li>
+     * </ol>
+     *
+     * @param parameterMapName paremterMap 的 id
+     * @param parameterTypeClass paremterMap 的 type
+     * @param statementId statement 的 id
+     * @return
+     */
     private ParameterMap getStatementParameterMap(
             String parameterMapName,
             Class<?> parameterTypeClass,
@@ -504,14 +597,12 @@ public class MapperBuilderAssistant extends BaseBuilder {
         // 获得 ParameterMap 的编号，格式为 `${namespace}.${parameterMapName}`
         parameterMapName = applyCurrentNamespace(parameterMapName, true);
         ParameterMap parameterMap = null;
-        // 如果 parameterMapName 非空，则获得 parameterMapName 对应的 ParameterMap 对象
         if (parameterMapName != null) {
             try {
                 parameterMap = configuration.getParameterMap(parameterMapName);
             } catch (IllegalArgumentException e) {
                 throw new IncompleteElementException("Could not find parameter map " + parameterMapName, e);
             }
-            // 如果 parameterTypeClass 非空，则创建 ParameterMap 对象
         } else if (parameterTypeClass != null) {
             List<ParameterMapping> parameterMappings = new ArrayList<>();
             parameterMap = new ParameterMap.Builder(
@@ -523,27 +614,59 @@ public class MapperBuilderAssistant extends BaseBuilder {
         return parameterMap;
     }
 
-    // 获得 ResultMap 集合
+    /**
+     * <ol>
+     *     根据相对resultMap ids（逗号分割）、resultType、statement id 获取对应的{@link ResultMap}列表
+     *     <li>
+     *         调用{@link #applyCurrentNamespace(String, boolean)}传入{@code resultMap}和true，返回一个绝对id TODO：这里貌似有问题，如果这里resultMap包含了多个id，只能校验或者拼接到第一个id
+     *     </li>
+     *     <li>new 一个{@link ArrayList}对象用来装载{@link ResultMap}对象</li>
+     *     <li>
+     *         判断{@code resultMap} != null
+     *         <ul>
+     *             <li>
+     *                 true：调用{@code resultMap}.split(",")得到一个数组，遍历迭代该数组，对于每一个迭代的元素（resultMap id）：调用{@link #configuration}的{@link Configuration#getResultMap(String)}传入"当前元素.trim()"尝试获取对应的{@link ResultMap}对象（该方法获取不到会抛出异常），然后将获取到的{@link ResultMap}添加到第二步new 的{@link ArrayList}中
+     *             </li>
+     *             <li>
+     *                 false：判断 {@code resultType} != null
+     *                 <ul>
+     *                     <li>
+     *                         true：调用{@link ResultMap.Builder#Builder(Configuration, String, Class, List, Boolean)}传入  {@link #configuration}、{@code statementId} + "-Inline"（自动拼接的唯一resultMapId）、{@code resultType}、new 一个{@link ArrayList}对象、null  共5个参数构建一个
+     *                         {@link ResultMap.Builder}对象，然后调用{@link ResultMap.Builder#build()}构建一个{@link ResultMap}对象，最后将该对象添加到第二步new的{@link ArrayList}中
+     *                     </li>
+     *                     <li>
+     *                         false：什么也不做，继续往下走
+     *                     </li>
+     *                 </ul>
+     *             </li>
+     *         </ul>
+     *     </li>
+     *     <li>
+     *         返回第二步new 的{@link ArrayList}对象
+     *     </li>
+     * </ol>
+     *
+     * @param resultMap resultMap的id
+     * @param resultType
+     * @param statementId
+     * @return
+     */
     private List<ResultMap> getStatementResultMaps(
             String resultMap,
             Class<?> resultType,
             String statementId) {
-        // 获得 resultMap 的编号
         resultMap = applyCurrentNamespace(resultMap, true);
 
-        // 创建 ResultMap 集合
         List<ResultMap> resultMaps = new ArrayList<>();
-        // 如果 resultMap 非空，则获得 resultMap 对应的 ResultMap 对象(们）
         if (resultMap != null) {
             String[] resultMapNames = resultMap.split(",");
             for (String resultMapName : resultMapNames) {
                 try {
-                    resultMaps.add(configuration.getResultMap(resultMapName.trim())); // 从 configuration 中获得
+                    resultMaps.add(configuration.getResultMap(resultMapName.trim()));
                 } catch (IllegalArgumentException e) {
                     throw new IncompleteElementException("Could not find result map " + resultMapName, e);
                 }
             }
-        // 如果 resultType 非空，则创建 ResultMap 对象
         } else if (resultType != null) {
             ResultMap inlineResultMap = new ResultMap.Builder(
                     configuration,
@@ -627,10 +750,46 @@ public class MapperBuilderAssistant extends BaseBuilder {
     }
 
 
+    /**
+     * <ol>
+     *     <li>
+     *         new 一个{@link HashSet}对象
+     *     </li>
+     *     <li>
+     *         判断 {@code columnName} != null：
+     *         <ul>
+     *             <li>
+     *                 true：判断：{@code columnName}.indexOf(',') > -1
+     *                 <ul>
+     *                     <li>
+     *                         true：
+     *                         <ol>
+     *                             <li>
+     *                                 调用构造器{@link StringTokenizer#StringTokenizer(String, String, boolean)}传入{@code columName}、"{}, "、false 四个参数构建一个{@link StringTokenizer}对象，该对象以"{}, "四个字符作为分隔符对{@code columnName}进行切割成多个"Token"，且该Token不含切割的分隔符
+     *                             </li>
+     *                             <li>
+     *                                 通过{@link StringTokenizer#hasMoreTokens()}和{@link StringTokenizer#nextToken()}进行while循环获取所有的Token（切割出来的字段名），然后将所有Token添加到第一步new的{@link HashSet}中
+     *                             </li>
+     *                         </ol>
+     *                     </li>
+     *                     <li>
+     *                         false：直接添加{@code columnName}到第一步new 的{@link HashSet}对象中
+     *                     </li>
+     *                 </ul>
+     *             </li>
+     *             <li>
+     *                 false：什么也不做，直接返回第一步new 的空{@link HashSet}
+     *             </li>
+     *         </ul>
+     *     </li>
+     * </ol>
+     *
+     * @param columnName
+     * @return
+     */
     private Set<String> parseMultipleColumnNames(String columnName) {
         Set<String> columns = new HashSet<>();
         if (columnName != null) {
-            // 多个字段，使用 ，分隔
             if (columnName.indexOf(',') > -1) {
                 StringTokenizer parser = new StringTokenizer(columnName, "{}, ", false);
                 while (parser.hasMoreTokens()) {
@@ -785,9 +944,15 @@ public class MapperBuilderAssistant extends BaseBuilder {
      *         判断{@code langClass}是否为null：
      *         <ul>
      *             <li>
-     *                 不为null则：调用成员变量{@link #configuration}的{@link Configuration#getLanguageRegistry()}获取
+     *                 不为null则：调用成员变量{@link #configuration}的{@link Configuration#getLanguageRegistry()}获取{@link Configuration#languageRegistry}对象然后调用{@link org.apache.ibatis.scripting.LanguageDriverRegistry#register(Class)}进行注册
+     *             </li>
+     *             <li>
+     *                 为null则：调用成员变量{@link #configuration}的{@link Configuration#getLanguageRegistry()}获取{@link Configuration#languageRegistry}对象然后调用{@link LanguageDriverRegistry#getDefaultDriver()}获取默认的{@link LanguageDriver}的{@link Class}对象
      *             </li>
      *         </ul>
+     *     </li>
+     *     <li>
+     *         调用{@link LanguageDriverRegistry#getDriver(Class)}传入不为null的{@code langClass}或者默认的{@link LanguageDriverRegistry#defaultDriverClass}返回对应的{@link LanguageDriver}实例并return
      *     </li>
      * </ol>
      *

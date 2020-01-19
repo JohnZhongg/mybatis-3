@@ -15,8 +15,7 @@
  */
 package org.apache.ibatis.scripting.xmltags;
 
-import ognl.Ognl;
-import ognl.OgnlException;
+import ognl.*;
 import org.apache.ibatis.builder.BuilderException;
 
 import java.util.Map;
@@ -34,7 +33,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class OgnlCache {
 
     /**
-     * OgnlMemberAccess 单例
+     * {@link OgnlMemberAccess} 单例
      */
     private static final OgnlMemberAccess MEMBER_ACCESS = new OgnlMemberAccess();
     /**
@@ -43,10 +42,16 @@ public final class OgnlCache {
     private static final OgnlClassResolver CLASS_RESOLVER = new OgnlClassResolver();
 
     /**
-     * 表达式的缓存的映射
+     * <ul>
+     *     表达式的缓存的映射
+     *     <li>
+     *         KEY：OGNL 表达式
+     *     </li>
+     *     <li>
+     *         VALUE：OGNL表达式编译之后的对象的缓存（{@link Ognl#parseExpression(String)}）
+     *     </li>
+     * </ul>
      *
-     * KEY：表达式
-     * VALUE：表达式的缓存 @see #parseExpression(String)
      */
     private static final Map<String, Object> expressionCache = new ConcurrentHashMap<>();
 
@@ -54,18 +59,51 @@ public final class OgnlCache {
         // Prevent Instantiation of Static Class
     }
 
+    /**
+     * <ol>
+     *     <li>
+     *         调用{@link Ognl#createDefaultContext(Object, MemberAccess, ClassResolver, TypeConverter)}传入 {@code root}、{@link #MEMBER_ACCESS}、{@link #CLASS_RESOLVER}、null 四个参数获取一个OGNL命名上下文{@link Map}对象  <b>（其实这个上下文对象在OGNL中就相当于myabtis里面的变量property，使其支持变量设置，但是mybatis这里创建的上下文其实并没有实际用途，参考{@link DynamicContext.ContextAccessor#getProperty(Map, Object, Object)}。个人理解是mybatis本身引入OGNL就是为了解决sql中的变量，所以，禁止套娃 ^_^）</b>
+     *     </li>
+     *     <li>
+     *         调用{@link #parseExpression(String)}获取表达式解释之后得到的一个树形对象，然后调用 {@link Ognl#getValue(Object, Map, Object)}传入获得的树形对象、第一步获得的OGNL命名上下文、{@code root} 三个参数获取对应的结果并返回该结果，本方法结束
+     *     </li>
+     * </ol>
+     *
+     * @param expression OGNL表达式
+     * @param root 两个用途：1、创建本次OGNL解析的上下文设置该对象为这个上下文的root；2、设置为本次OGNL解析的root对象
+     * @return
+     */
     public static Object getValue(String expression, Object root) {
         try {
-            // 创建 OGNL Context 对象
             Map context = Ognl.createDefaultContext(root, MEMBER_ACCESS, CLASS_RESOLVER, null);
-            // 解析表达式
-            // 获得表达式对应的值
             return Ognl.getValue(parseExpression(expression), context, root);
         } catch (OgnlException e) {
             throw new BuilderException("Error evaluating expression '" + expression + "'. Cause: " + e, e);
         }
     }
 
+    /**
+     * <ol>
+     *     <li>
+     *         调用{@link #expressionCache}的{@link ConcurrentHashMap#get(Object)}传入{@code expresstion}获取对应的缓存对象
+     *     </li>
+     *     <li>
+     *         判断第一步返回的结果是否为null：
+     *         <ul>
+     *             <li>
+     *                 为null：调用{@link Ognl#parseExpression(String)}传入{@code expression}得到编译之后的结果对象，并调用{@link #expressionCache}的{@link ConcurrentHashMap#put(Object, Object)}传入{@code expresstion}和获取的结果设置缓存，然后返回该结果，本方法结束
+     *             </li>
+     *             <li>
+     *                 不为null：直接返回第一步获取到的结果，本方法结束
+     *             </li>
+     *         </ul>
+     *     </li>
+     * </ol>
+     *
+     * @param expression 要解析的OGNL表达式
+     * @return
+     * @throws OgnlException
+     */
     private static Object parseExpression(String expression) throws OgnlException {
         Object node = expressionCache.get(expression);
         if (node == null) {

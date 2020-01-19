@@ -52,7 +52,7 @@ public class XMLMapperBuilder extends BaseBuilder {
      */
     private final Map<String, XNode> sqlFragments;
     /**
-     * 资源的唯一标识
+     * 资源的唯一标识（就是xml文件路径）（在{@link Configuration#loadedResources}中代表本XML资源的唯一标识是字符串"namespace:"拼接当前Mapper接口的全限定名，参考方法{@link #bindMapperForNamespace()}的步骤2.true.2.true.1）
      */
     private final String resource;
 
@@ -93,9 +93,32 @@ public class XMLMapperBuilder extends BaseBuilder {
      *          检查当前mapper xml是否已经加载过：通过{@link Configuration#isResourceLoaded(String)}方法查看{@link Configuration#loadedResources}中是否包含当前xml的唯一标识
      *          <ul>
      *              <li>
-     *                  如果没有加载则调用
+     *                  没有加载过：
+     *                  <ol>
+     *                      <li>
+     *                          先调用{@link #parser}的{@link XPathParser#evalNode(String)}传入"/mapper"解析整个{@code <mapper/>}标签成为对应的{@link XNode}对象，然后调用{@link #configurationElement(XNode)}传入该{@link XNode}对象进行解析
+     *                      </li>
+     *                      <li>
+     *                          调用{@link #configuration}的{@link Configuration#addLoadedResource(String)}传入{@link #resource}标记当前资源（当前mapper对应的xml文件）已经加载
+     *                      </li>
+     *                      <li>
+     *                          调用{@link #bindMapperForNamespace()} 添加当前xml对应的mapper的{@link Class}对象到{@link Configuration}中，并解析其包含的一些mybatis的注解
+     *                      </li>
+     *                  </ol>
+     *              </li>
+     *              <li>
+     *                  加载过了：什么也不做，继续往下走
      *              </li>
      *          </ul>
+     *     </li>
+     *     <li>
+     *         调用{@link #parsePendingResultMaps()}解析待定的 {@code <resultMap />} 节点
+     *     </li>
+     *     <li>
+     *         调用{@link #parsePendingResultMaps()}解析待定的 {@code <cache-ref />} 节点
+     *     </li>
+     *     <li>
+     *         调用{@link #parsePendingResultMaps()}解析待定的 SQL 语句的节点
      *     </li>
      * </ol>
      */
@@ -106,11 +129,8 @@ public class XMLMapperBuilder extends BaseBuilder {
             bindMapperForNamespace();
         }
 
-        // 解析待定的 <resultMap /> 节点
         parsePendingResultMaps();
-        // 解析待定的 <cache-ref /> 节点
         parsePendingCacheRefs();
-        // 解析待定的 SQL 语句的节点
         parsePendingStatements();
     }
 
@@ -248,35 +268,61 @@ public class XMLMapperBuilder extends BaseBuilder {
         }
     }
 
+    /**
+     * <ol>
+     *     <li>
+     *         调用成员变量{@link #configuration}的{@link Configuration#getIncompleteResultMaps()}获取未处理的{@link ResultMap}的{@link ResultMapResolver}对象集合
+     *     </li>
+     *     <li>
+     *         用 synchronized 锁住该集合对象
+     *     </li>
+     *     <li>
+     *         调用{@link Collection#iterator()}获取集合的迭代对象{@link Iterator}
+     *     </li>
+     *     <li>
+     *         使用以上迭代器进行迭代({@link Iterator#hasNext()})：调用{@link Iterator#next()}获取下一个未解析的{@link ResultMapResolver}对象并调用{@link ResultMapResolver#resolve()}进行解析，然后调用{@link Iterator#remove()}移出当前{@link ResultMapResolver}，本过程
+     *         使用try catch进行异常（{@link IncompleteElementException}）捕获，如果捕获到了异常，什么也不做，结束方法
+     *     </li>
+     * </ol>
+     */
     private void parsePendingResultMaps() {
-        // 获得 ResultMapResolver 集合，并遍历进行处理
         Collection<ResultMapResolver> incompleteResultMaps = configuration.getIncompleteResultMaps();
         synchronized (incompleteResultMaps) {
             Iterator<ResultMapResolver> iter = incompleteResultMaps.iterator();
             while (iter.hasNext()) {
                 try {
-                    // 执行解析
                     iter.next().resolve();
-                    // 移除
                     iter.remove();
                 } catch (IncompleteElementException e) {
                     // ResultMap is still missing a resource...
-                    // 解析失败，不抛出异常
                 }
             }
         }
     }
-
+    /**
+     * <ol>
+     *     <li>
+     *         调用成员变量{@link #configuration}的{@link Configuration#getIncompleteCacheRefs()}获取未处理的{@link Cache}的{@link CacheRefResolver}对象集合
+     *     </li>
+     *     <li>
+     *         用 synchronized 锁住该集合对象
+     *     </li>
+     *     <li>
+     *         调用{@link Collection#iterator()}获取集合的迭代对象{@link Iterator}
+     *     </li>
+     *     <li>
+     *         使用以上迭代器进行迭代({@link Iterator#hasNext()})：调用{@link Iterator#next()}获取下一个未解析的{@link CacheRefResolver}对象并调用{@link CacheRefResolver#resolveCacheRef()}进行解析，然后调用{@link Iterator#remove()}移出当前{@link CacheRefResolver}，本过程
+     *         使用try catch进行异常（{@link IncompleteElementException}）捕获，如果捕获到了异常，什么也不做，结束方法
+     *     </li>
+     * </ol>
+     */
     private void parsePendingCacheRefs() {
-        // 获得 CacheRefResolver 集合，并遍历进行处理
         Collection<CacheRefResolver> incompleteCacheRefs = configuration.getIncompleteCacheRefs();
         synchronized (incompleteCacheRefs) {
             Iterator<CacheRefResolver> iter = incompleteCacheRefs.iterator();
             while (iter.hasNext()) {
                 try {
-                    // 执行解析
                     iter.next().resolveCacheRef();
-                    // 移除
                     iter.remove();
                 } catch (IncompleteElementException e) {
                     // Cache ref is still missing a resource...
@@ -284,17 +330,30 @@ public class XMLMapperBuilder extends BaseBuilder {
             }
         }
     }
-
+    /**
+     * <ol>
+     *     <li>
+     *         调用成员变量{@link #configuration}的{@link Configuration#getIncompleteStatements()}获取未处理的{@link Cache}的{@link XMLStatementBuilder}对象集合
+     *     </li>
+     *     <li>
+     *         用 synchronized 锁住该集合对象
+     *     </li>
+     *     <li>
+     *         调用{@link Collection#iterator()}获取集合的迭代对象{@link Iterator}
+     *     </li>
+     *     <li>
+     *         使用以上迭代器进行迭代({@link Iterator#hasNext()})：调用{@link Iterator#next()}获取下一个未解析的{@link XMLStatementBuilder}对象并调用{@link XMLStatementBuilder#parseStatementNode()}进行解析，然后调用{@link Iterator#remove()}移出当前{@link XMLStatementBuilder}，本过程
+     *         使用try catch进行异常（{@link IncompleteElementException}）捕获，如果捕获到了异常，什么也不做，结束方法
+     *     </li>
+     * </ol>
+     */
     private void parsePendingStatements() {
-        // 获得 XMLStatementBuilder 集合，并遍历进行处理
         Collection<XMLStatementBuilder> incompleteStatements = configuration.getIncompleteStatements();
         synchronized (incompleteStatements) {
             Iterator<XMLStatementBuilder> iter = incompleteStatements.iterator();
             while (iter.hasNext()) {
                 try {
-                    // 执行解析
                     iter.next().parseStatementNode();
-                    // 移除
                     iter.remove();
                 } catch (IncompleteElementException e) {
                     // Statement is still missing a resource...
@@ -863,12 +922,64 @@ public class XMLMapperBuilder extends BaseBuilder {
     }
 
     /**
-     * 绑定 Mapper
+     * 绑定 Mapper：
+     * <ol>
+     *     <li>
+     *         调用{@link #builderAssistant}的{@link MapperBuilderAssistant#getCurrentNamespace()}获取当前mapper的"namespace"（mapper全限定名）
+     *     </li>
+     *     <li>
+     *         判断：前一步获取的"namespace" != null
+     *         <ul>
+     *             <li>
+     *                 true：
+     *                 <ol>
+     *                     <li>
+     *                         调用{@link Resources#classForName(String)}传入"namespace"获得对应的{@link Class}对象（try catch 捕获{@link ClassNotFoundException}异常，catch中什么也不做）。代码为：
+     *                         <pre>
+     *             try {
+     *                 boundType = Resources.classForName(namespace);
+     *             } catch (ClassNotFoundException e) {
+     *                 //ignore, bound type is not required
+     *             }
+     *                         </pre>
+     *                     </li>
+     *                     <li>
+     *                         判断：如果前面的步骤得到的{@link Class}对象 != null
+     *                         <ul>
+     *                             <li>
+     *                                 判断：调用{@link #configuration}的{@link Configuration#hasMapper(Class)}传入前面获取到的{@link Class}对象返回的结果是false（{@link Configuration}中还没有加载该Mapper的{@link Class}对象）
+     *                                 <ul>
+     *                                     <li>
+     *                                         true：
+     *                                         <ol>
+     *                                             <li>
+     *                                                 调用{@link #configuration}的{@link Configuration#addLoadedResource(String)}传入 <u><b>字符串"namespace:"+前面获得的namespace变量</b></u>（标明当前mapper对应的class已经加载了）
+     *                                             </li>
+     *                                             <li>
+     *                                                 调用{@link #configuration}的{@link Configuration#addMapper(Class)}传入前面获取的{@link Class}对象绑定mapper对应的{@link Class}对象到{@link Configuration}
+     *                                             </li>
+     *                                         </ol>
+     *                                     </li>
+     *                                     <li>
+     *                                         false：什么也不做
+     *                                     </li>
+     *                                 </ul>
+     *                             </li>
+     *                         </ul>
+     *                     </li>
+     *                 </ol>
+     *             </li>
+     *             <li>
+     *                 false：什么也不做，本方法结束
+     *             </li>
+     *         </ul>
+     *     </li>
+     * </ol>
+     *
      */
     private void bindMapperForNamespace() {
         String namespace = builderAssistant.getCurrentNamespace();
         if (namespace != null) {
-            // 获得 Mapper 映射配置文件对应的 Mapper 接口，实际上类名就是 namespace 。嘿嘿，这个是常识。
             Class<?> boundType = null;
             try {
                 boundType = Resources.classForName(namespace);
@@ -876,14 +987,11 @@ public class XMLMapperBuilder extends BaseBuilder {
                 //ignore, bound type is not required
             }
             if (boundType != null) {
-                // 不存在该 Mapper 接口，则进行添加
                 if (!configuration.hasMapper(boundType)) {
                     // Spring may not know the real resource name so we set a flag
                     // to prevent loading again this resource from the mapper interface
                     // look at MapperAnnotationBuilder#loadXmlResource
-                    // 标记 namespace 已经添加，避免 MapperAnnotationBuilder#loadXmlResource(...) 重复加载
                     configuration.addLoadedResource("namespace:" + namespace);
-                    // 添加到 configuration 中
                     configuration.addMapper(boundType);
                 }
             }

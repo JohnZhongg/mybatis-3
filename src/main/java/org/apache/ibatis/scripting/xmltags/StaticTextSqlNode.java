@@ -27,13 +27,23 @@ public class StaticTextSqlNode implements SqlNode {
      */
     private final String text;
 
+    /**
+     * {@code text}赋值到{@link #text}
+     *
+     * @param text
+     */
     public StaticTextSqlNode(String text) {
         this.text = text;
     }
 
+    /**
+     * 调用{@code context}的{@link DynamicContext#appendSql(String)}传入{@link #text}拼接sql到{@link DynamicContext#sqlBuilder}，然后返回true
+     *
+     * @param context 上下文
+     * @return
+     */
     @Override
     public boolean apply(DynamicContext context) {
-        // 直接拼接到 context 中
         context.appendSql(text);
         return true;
     }

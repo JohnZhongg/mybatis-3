@@ -488,7 +488,7 @@ public class Reflector {
     }
 
     /**
-     * Checks whether can control member accessible.
+     * Checks whether can control member accessible.(检测当前jvm是否配置了限制通过反射访问private对象的权限)
      *
      * @return If can control member accessible, it return {@literal true}
      * @since 3.5.0

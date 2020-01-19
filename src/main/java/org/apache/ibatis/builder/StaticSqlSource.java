@@ -23,35 +23,56 @@ import org.apache.ibatis.session.Configuration;
 import java.util.List;
 
 /**
- * 静态的 SqlSource 实现类
+ * 静态的 {@link SqlSource} 实现类
  *
  * @author Clinton Begin
  */
 public class StaticSqlSource implements SqlSource {
 
     /**
-     * 静态的 SQL
+     * 静态的 SQL（最终sql："${}"动态替换成了对应的字符串、"#{}"替换成了?）
      */
     private final String sql;
     /**
-     * ParameterMapping 集合
+     * {@link ParameterMapping} 对象集合
      */
     private final List<ParameterMapping> parameterMappings;
+    /**
+     * 全局的{@link Configuration}对象
+     */
     private final Configuration configuration;
 
+    /**
+     * 调用另一个构造器{@link StaticSqlSource#StaticSqlSource(Configuration, String, List)}传入{@code configuration}、{@code sql}、null构建一个{@link StaticSqlSource}对象
+     *
+     * @param configuration
+     * @param sql
+     */
     public StaticSqlSource(Configuration configuration, String sql) {
         this(configuration, sql, null);
     }
 
+    /**
+     * {@code sql}赋值到{@link #sql}、{@code parameterMappings}赋值到{@link #parameterMappings}、{@code configuration}赋值到{@link #configuration}
+     *
+     * @param configuration
+     * @param sql
+     * @param parameterMappings
+     */
     public StaticSqlSource(Configuration configuration, String sql, List<ParameterMapping> parameterMappings) {
         this.sql = sql;
         this.parameterMappings = parameterMappings;
         this.configuration = configuration;
     }
 
+    /**
+     * 调用{@link BoundSql#BoundSql(Configuration, String, List, Object)}传入{@link #configuration}、{@link #sql}、{@link #parameterMappings}、{@code parameterObject} 四个参数实例化一个{@link BoundSql}对象并返回
+     *
+     * @param parameterObject 参数对象
+     * @return
+     */
     @Override
     public BoundSql getBoundSql(Object parameterObject) {
-        // 创建 BoundSql 对象
         return new BoundSql(configuration, sql, parameterMappings, parameterObject);
     }
 

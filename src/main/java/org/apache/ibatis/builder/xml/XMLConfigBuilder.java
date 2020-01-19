@@ -26,6 +26,7 @@ import org.apache.ibatis.type.TypeHandler;
 import javax.sql.DataSource;
 import java.io.InputStream;
 import java.io.Reader;
+import java.util.Map;
 import java.util.Properties;
 
 /**
@@ -106,28 +107,50 @@ public class XMLConfigBuilder extends BaseBuilder {
     }
 
     /**
-     * 解析 XML 成 Configuration 对象。
+     * 解析 XML 成 {@link Configuration} 对象
+     * <ol>
+     *     <li>
+     *         如果{@link #parsed}为true：直接抛出异常{@link BuilderException}("Each XMLConfigBuilder can only be used once.")；否则什么也不做，继续往下走
+     *     </li>
+     *     <li>
+     *         赋值true到{@link #parsed}
+     *     </li>
+     *     <li>调用{@link #parser}的{@link XPathParser#evalNode(String)}传入"/configuration"获取根标签{@code <configuration/>}的{@link XNode}对象，然后调用{@link #parseConfiguration(XNode)}传入该{@link XNode}对象进行解析得到{@link Configuration}对象并赋值到{@link #configuration}</li>
+     *     <li>return {@link #configuration}，本方法结束</li>
+     * </ol>
      *
      * @return Configuration 对象
      */
     public Configuration parse() {
-        // 若已解析，抛出 BuilderException 异常
         if (parsed) {
             throw new BuilderException("Each XMLConfigBuilder can only be used once.");
         }
-        // 标记已解析
         parsed = true;
-        // 解析 XML configuration 节点
         parseConfiguration(parser.evalNode("/configuration"));
         return configuration;
     }
 
     /**
-     * 解析 XML
+     * 解析 config xml <br>
      *
-     * 具体 MyBatis 有哪些 XML 标签，参见 《XML 映射配置文件》http://www.mybatis.org/mybatis-3/zh/configuration.html
+     * 具体 MyBatis 有哪些 XML 标签，参见 《XML 映射配置文件》http://www.mybatis.org/mybatis-3/zh/configuration.html <br>
      *
-     * @param root 根节点
+     * <ol>
+     *     <li>调用{@code root}的{@link XNode#evalNode(String)}传入"properties"获取子标签{@code <properties/>}的{@link XNode}对象，然后调用{@link #propertiesElement(XNode)}传入该{@link XNode}对象进行解析</li>
+     *     <li>调用{@code root}的{@link XNode#evalNode(String)}传入"settings"获取子标签{@code <settings/>}的{@link XNode}对象，然后调用{@link #settingsAsProperties(XNode)}传入该{@link XNode}转为{@link Properties}对象，然后再调用{@link #loadCustomVfs(Properties)}传入该{@link Properties}对象加载自定义的VFS系统</li>
+     *     <li>调用{@code root}的{@link XNode#evalNode(String)}传入"typeAliases"获取子标签{@code <typeAliases/>}的{@link XNode}对象，然后调用{@link #typeAliasesElement(XNode)}传入该{@link XNode}对象进行解析</li>
+     *     <li>调用{@code root}的{@link XNode#evalNode(String)}传入"plugins"获取子标签{@code <plugins/>}的{@link XNode}对象，然后调用{@link #pluginElement(XNode)}传入该{@link XNode}对象进行解析</li>
+     *     <li>调用{@code root}的{@link XNode#evalNode(String)}传入"objectFactory"获取子标签{@code <objectFactory/>}的{@link XNode}对象，然后调用{@link #objectFactoryElement(XNode)}传入该{@link XNode}对象进行解析</li>
+     *     <li>调用{@code root}的{@link XNode#evalNode(String)}传入"objectWrapperFactory"获取子标签{@code <objectWrapperFactory/>}的{@link XNode}对象，然后调用{@link #objectWrapperFactoryElement(XNode)}传入该{@link XNode}对象进行解析</li>
+     *     <li>调用{@code root}的{@link XNode#evalNode(String)}传入"reflectorFactory"获取子标签{@code <reflectorFactory/>}的{@link XNode}对象，然后调用{@link #reflectorFactoryElement(XNode)}传入该{@link XNode}对象进行解析</li>
+     *     <li>调用{@link #settingsElement(Properties)}传入第一步转化"settings"得到的{@link Properties}对象对其中的值设置到{@link Configuration}</li>
+     *     <li>调用{@code root}的{@link XNode#evalNode(String)}传入"environments"获取子标签{@code <environments/>}的{@link XNode}对象，然后调用{@link #environmentsElement(XNode)}传入该{@link XNode}对象进行解析</li>
+     *     <li>调用{@code root}的{@link XNode#evalNode(String)}传入"databaseIdProvider"获取子标签{@code <databaseIdProvider/>}的{@link XNode}对象，然后调用{@link #databaseIdProviderElement(XNode)}传入该{@link XNode}对象进行解析</li>
+     *     <li>调用{@code root}的{@link XNode#evalNode(String)}传入"typeHandlers"获取子标签{@code <typeHandlers/>}的{@link XNode}对象，然后调用{@link #typeHandlerElement(XNode)}传入该{@link XNode}对象进行解析</li>
+     *     <li>调用{@code root}的{@link XNode#evalNode(String)}传入"mappers"获取子标签{@code <mappers/>}的{@link XNode}对象，然后调用{@link #mapperElement(XNode)}传入该{@link XNode}对象进行解析</li>
+     * </ol>
+     *
+     * @param root 根节点（{@code <configuration/>}）
      */
     private void parseConfiguration(XNode root) {
         try {
@@ -516,9 +539,59 @@ public class XMLConfigBuilder extends BaseBuilder {
     }
 
     /**
-     * 解析 {@code <mappers />} 标签
+     * 解析 {@code <mappers />} 标签：
+     * <ul>
+     *     判断{@code parent}不是null
+     *     <li>
+     *         true：调用{@code parent}的{@link XNode#getChildren()}获取子节点{@link XNode}对象列表{@link java.util.List}，遍历迭代该{@link java.util.List}集合，对于每一个迭代的子节点{@link XNode}对象：
+     *         <ul>
+     *             判断 "package".equals(当前子节点{@link XNode#getName()})
+     *             <li>
+     *                 true：调用当前子节点{@link XNode#getStringAttribute(String)}传入"name"获取该属性值并传入到{@link #configuration}的{@link Configuration#addMappers(String)}方法中解析该属性值作为包名下作为mapper接口类
+     *             </li>
+     *             <li>
+     *                 false：调用当前子节点的{@link XNode#getStringAttribute(String)}分别传入"resource"、"url"、"class"获取这三个属性值，判断 "resource"属性值 != null && "url"属性值 == null && "class"属性值 == null
+     *                 <ul>
+     *                     <li>
+     *                         true：
+     *                         <ol>
+     *                             <li>调用{@link ErrorContext#instance()}然后调用{@link ErrorContext#resource(String)}传入"resource"属性值，构建一个错误上下文对象放到{@link ThreadLocal}中，方便当前线程中后面的方法调用或者代码块拿到错误上下文进行错误信息补充</li>
+     *                             <li>调用{@link Resources#getResourceAsStream(String)}传入"resource"属性值获取到xml文件的{@link InputStream}对象</li>
+     *                             <li>调用构造器{@link XMLMapperBuilder#XMLMapperBuilder(InputStream, Configuration, String, Map)}传入 前一步获得的mapper xml文件的{@link InputStream}对象、{@link #configuration}、"resource"属性值、{@link Configuration#getSqlFragments()}  四个参数构建一个{@link XMLMapperBuilder}对象</li>
+     *                             <li>调用{@link XMLMapperBuilder#parse()}进行mapper xml解析</li>
+     *                         </ol>
+     *                     </li>
+     *                     <li>
+     *                         false：判断 "resource"属性值 == null && "url"属性值 != null && "class"属性值 == null
+     *                         <ul>
+     *                             <li>
+     *                                 true：
+     *                                 <ol>
+     *                                     <li>调用{@link ErrorContext#instance()}然后调用{@link ErrorContext#resource(String)}传入"url"属性值，构建一个错误上下文对象放到{@link ThreadLocal}中，方便当前线程中后面的方法调用或者代码块拿到错误上下文进行错误信息补充</li>
+     *                                     <li>调用{@link Resources#getUrlAsStream(String)} 传入"url"属性值获取到xml文件的{@link InputStream}对象</li>
+     *                                     <li>调用构造器{@link XMLMapperBuilder#XMLMapperBuilder(InputStream, Configuration, String, Map)}传入 前一步获得的mapper xml文件的{@link InputStream}对象、{@link #configuration}、"url"属性值、{@link Configuration#getSqlFragments()}  四个参数构建一个{@link XMLMapperBuilder}对象</li>
+     *                                     <li>调用{@link XMLMapperBuilder#parse()}进行mapper xml解析</li>
+     *                                 </ol>
+     *                             </li>
+     *                             <li>
+     *                                 false：判断 "resource"属性值 == null && "url"属性值 == null && "class"属性值 != null
+     *                                 <ul>
+     *                                     <li>
+     *                                         true：调用{@link Resources#classForName(String)}传入"class"属性值获得对应的{@link Class}对象，然后调用{@link #configuration}的{@link Configuration#addMapper(Class)}传入该{@link Class}对象进行mapper接口类解析
+     *                                     </li>
+     *                                     <li>false：直接抛出异常{@link BuilderException}（"A mapper element may only specify a url, resource or class, but not more than one."）</li>
+     *                                 </ul>
+     *                             </li>
+     *                         </ul>
+     *                     </li>
+     *                 </ul>
+     *             </li>
+     *         </ul>
+     *     </li>
+     *     <li>false：什么也不做，本方法结束</li>
+     * </ul>
      *
-     * @param parent
+     * @param parent config xml中{@code <mappers/>}标签的{@link XNode}对象
      * @throws Exception
      */
     private void mapperElement(XNode parent) throws Exception {

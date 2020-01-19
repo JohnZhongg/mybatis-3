@@ -53,4 +53,7 @@
   <update id="updateTable2WithGeneratedKeyXml" useGeneratedKeys="true" keyProperty="generatedName" keyColumn="NAME_FRED">
     update table2 set name = #{name} where id = #{nameId}
   </update>
+
+
+
 </mapper>

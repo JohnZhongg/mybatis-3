@@ -81,6 +81,13 @@ public class ParameterMapping {
 
         private ParameterMapping parameterMapping = new ParameterMapping();
 
+        /**
+         * {@code configuration}赋值到{@link #parameterMapping}的{@link ParameterMapping#configuration}、{@code property}赋值到{@link #parameterMapping}的{@link ParameterMapping#property}、{@code typeHandler}赋值到{@link #parameterMapping}的{@link ParameterMapping#typeHandler}、{@link ParameterMode#IN}赋值到{@link #parameterMapping}的{@link ParameterMapping#mode}
+         *
+         * @param configuration
+         * @param property
+         * @param typeHandler
+         */
         public Builder(Configuration configuration, String property, TypeHandler<?> typeHandler) {
             parameterMapping.configuration = configuration;
             parameterMapping.property = property;
@@ -88,6 +95,13 @@ public class ParameterMapping {
             parameterMapping.mode = ParameterMode.IN;
         }
 
+        /**
+         * {@code configuration}赋值到{@link #parameterMapping}的{@link ParameterMapping#configuration}、{@code property}赋值到{@link #parameterMapping}的{@link ParameterMapping#property}、{@code javaType}赋值到{@link #parameterMapping}的{@link ParameterMapping#javaType}、{@link ParameterMode#IN}赋值到{@link #parameterMapping}的{@link ParameterMapping#mode}
+         *
+         * @param configuration
+         * @param property
+         * @param javaType
+         */
         public Builder(Configuration configuration, String property, Class<?> javaType) {
             parameterMapping.configuration = configuration;
             parameterMapping.property = property;
@@ -95,41 +109,89 @@ public class ParameterMapping {
             parameterMapping.mode = ParameterMode.IN;
         }
 
+        /**
+         * 设置{@code mode}到{{@link #parameterMapping}的{@link ParameterMapping#mode}，然后返回this
+         *
+         * @param mode
+         * @return
+         */
         public Builder mode(ParameterMode mode) {
             parameterMapping.mode = mode;
             return this;
         }
 
+        /**
+         * 设置{@code javaType}到{{@link #parameterMapping}的{@link ParameterMapping#javaType}，然后返回this
+         *
+         * @param javaType
+         * @return
+         */
         public Builder javaType(Class<?> javaType) {
             parameterMapping.javaType = javaType;
             return this;
         }
 
+        /**
+         * 设置{@code jdbcType}到{{@link #parameterMapping}的{@link ParameterMapping#jdbcType}，然后返回this
+         *
+         * @param jdbcType
+         * @return
+         */
         public Builder jdbcType(JdbcType jdbcType) {
             parameterMapping.jdbcType = jdbcType;
             return this;
         }
 
+        /**
+         * 设置{@code numericScale}到{{@link #parameterMapping}的{@link ParameterMapping#numericScale}，然后返回this
+         *
+         * @param numericScale
+         * @return
+         */
         public Builder numericScale(Integer numericScale) {
             parameterMapping.numericScale = numericScale;
             return this;
         }
 
+        /**
+         * 设置{@code resultMapId}到{{@link #parameterMapping}的{@link ParameterMapping#resultMapId}，然后返回this
+         *
+         * @param resultMapId
+         * @return
+         */
         public Builder resultMapId(String resultMapId) {
             parameterMapping.resultMapId = resultMapId;
             return this;
         }
 
+        /**
+         * 设置{@code typeHandler}到{{@link #parameterMapping}的{@link ParameterMapping#typeHandler}，然后返回this
+         *
+         * @param typeHandler
+         * @return
+         */
         public Builder typeHandler(TypeHandler<?> typeHandler) {
             parameterMapping.typeHandler = typeHandler;
             return this;
         }
 
+        /**
+         * 设置{@code jdbcTypeName}到{{@link #parameterMapping}的{@link ParameterMapping#jdbcTypeName}，然后返回this
+         *
+         * @param jdbcTypeName
+         * @return
+         */
         public Builder jdbcTypeName(String jdbcTypeName) {
             parameterMapping.jdbcTypeName = jdbcTypeName;
             return this;
         }
 
+        /**
+         * 设置{@code expression}到{{@link #parameterMapping}的{@link ParameterMapping#expression}，然后返回this
+         *
+         * @param expression
+         * @return
+         */
         public Builder expression(String expression) {
             parameterMapping.expression = expression;
             return this;

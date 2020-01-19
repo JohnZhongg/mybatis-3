@@ -135,7 +135,7 @@ public class CacheBuilder {
      *         判断基础{@link Cache}是否为{@link PerpetualCache}.class：
      *         <ul>
      *             <li>
-     *                 是则遍历所有{@link #decorators}，调用{@link #newCacheDecoratorInstance(Class, Cache)}对基础{@link Cache}进行包装并执行{@link #setCacheProperties(Cache)}
+     *                 是则遍历所有{@link #decorators}，调用{@link #newCacheDecoratorInstance(Class, Cache)}对基础{@link Cache}进行包装并执行{@link #setCacheProperties(Cache)}。完成遍历后调用{@link #setStandardDecorators(Cache)}传入经过设置properties的该基础{@link Cache}进行标准包装，然后返回包装后的{@link Cache}
      *             </li>
      *             <li>
      *                 否则判断基础{@link Cache}是否是{@link LoggingCache}：如果是则直接返回该基础{@link Cache}；否则使用{@link LoggingCache}包装该基础{@link Cache}后返回

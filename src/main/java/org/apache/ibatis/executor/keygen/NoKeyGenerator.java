@@ -34,11 +34,27 @@ public class NoKeyGenerator implements KeyGenerator {
      */
     public static final NoKeyGenerator INSTANCE = new NoKeyGenerator();
 
+    /**
+     * 空方法
+     *
+     * @param executor
+     * @param ms
+     * @param stmt
+     * @param parameter
+     */
     @Override
     public void processBefore(Executor executor, MappedStatement ms, Statement stmt, Object parameter) {
         // Do Nothing
     }
 
+    /**
+     * 空方法
+     *
+     * @param executor
+     * @param ms
+     * @param stmt
+     * @param parameter
+     */
     @Override
     public void processAfter(Executor executor, MappedStatement ms, Statement stmt, Object parameter) {
         // Do Nothing

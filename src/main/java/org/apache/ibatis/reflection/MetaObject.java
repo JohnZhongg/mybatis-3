@@ -52,6 +52,37 @@ public class MetaObject {
      */
     private final ReflectorFactory reflectorFactory;
 
+    /**
+     * <ol>
+     *     <li>
+     *         赋值：{@code object}到{@link #originalObject}、{@code objectFactory}到{@link #objectFactory}、{@code objectWrapperFactory}到{@link #objectWrapperFactory}、{@code reflectorFactory}到{@link #reflectorFactory}
+     *     </li>
+     *     <li>
+     *         <ul>
+     *             <li>
+     *                 如果 {@code object} instanceof {@link ObjectWrapper}：{@code this.objectWrapper = (ObjectWrapper) object} 然后结束；否则继续往下走
+     *             </li>
+     *             <li>
+     *                 如果调用{@code objectWrapperFactory} 的{@link ObjectWrapperFactory#hasWrapperFor(Object)}传入{@code object}返回true：调用{@code objectWrapperFactory} 的{@link ObjectWrapperFactory#getWrapperFor(MetaObject, Object)}传入 "this"和{@code object}获得{@link ObjectWrapper}对象并赋值到{@link #objectWrapper}，结束；否则继续往下走
+     *             </li>
+     *             <li>
+     *                 如果 {@code object} instanceof {@link Map}：调用 {@link MapWrapper#MapWrapper(MetaObject, Map)}构造器传入 "this"和 ({@link Map}){@code Object}(强转) ，new一个{@link MapWrapper}并赋值到{@link #objectWrapper}，结束；否则继续往下走
+     *             </li>
+     *             <li>
+     *                 如果 {@code object} instanceof {@link Collection}：调用 {@link CollectionWrapper#CollectionWrapper(MetaObject, Collection)}构造器传入 "this"和 ({@link Collection}){@code Object}(强转) ，new一个{@link CollectionWrapper}并赋值到{@link #objectWrapper}，结束；否则继续往下走
+     *             </li>
+     *             <li>
+     *                 来到这里，直接调用 {@link BeanWrapper#BeanWrapper(MetaObject, Object)}构造器传入 "this"和 {@code Object} ，new一个{@link BeanWrapper}并赋值到{@link #objectWrapper}，结束
+     *             </li>
+     *         </ul>
+     *     </li>
+     * </ol>
+     *
+     * @param object 原生对象
+     * @param objectFactory 对象工厂
+     * @param objectWrapperFactory 对象包装器工厂
+     * @param reflectorFactory 反射工厂
+     */
     private MetaObject(Object object, ObjectFactory objectFactory, ObjectWrapperFactory objectWrapperFactory, ReflectorFactory reflectorFactory) {
         this.originalObject = object;
         this.objectFactory = objectFactory;
@@ -77,7 +108,15 @@ public class MetaObject {
     }
 
     /**
-     * 传入一个对象，封装对象元数据到MetaObject（如果传入的对象是null，就返回{@link SystemMetaObject.NULL_META_OBJECT}）
+     * <ul>
+     *     判断{@code object}是否为null：
+     *     <li>
+     *         是则：返回{@link SystemMetaObject.NULL_META_OBJECT}
+     *     </li>
+     *     <li>
+     *         否则：调用{@link MetaObject#MetaObject(Object, ObjectFactory, ObjectWrapperFactory, ReflectorFactory)}传入{@code object}、{@code objectFactory}、{@code objectWrapperFactory}、{@code reflectorFactory}构建当前对象的{@link MetaObject}对象并返回
+     *     </li>
+     * </ul>
      *
      * @param object               传入的对象
      * @param objectFactory        对象工厂
@@ -169,6 +208,12 @@ public class MetaObject {
         return objectWrapper.hasSetter(name);
     }
 
+    /**
+     * 本对象是否有该属性表达式对应的getter，调用{@link ObjectWrapper#hasGetter(String)}
+     *
+     * @param name 属性表达式
+     * @return
+     */
     public boolean hasGetter(String name) {
         return objectWrapper.hasGetter(name);
     }

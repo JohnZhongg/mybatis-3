@@ -16,7 +16,8 @@
 package org.apache.ibatis.scripting.xmltags;
 
 /**
- * <bind /> 标签的 SqlNode 实现类
+ * {@code <bind />} 标签的 SqlNode 实现类<br>
+ * 该标签用于将"value"属性值作为一个OGNL表达式到{@link DynamicContext#bindings}中获取对应的对象然后将该对象作为value，该标签"name"属性值作为key，put到{@link DynamicContext#bindings}中【即给某些可能的参数设置一个快捷访问名称或者别名，不只只通过OGNL表达式访问】
  *
  * @author Frank D. Martinez [mnesarco]
  */
@@ -27,20 +28,40 @@ public class VarDeclSqlNode implements SqlNode {
      */
     private final String name;
     /**
-     * 表达式
+     * OGNL表达式
      */
     private final String expression;
 
+    /**
+     * {@code var}赋值到{@link #name}、{@code exp}赋值到{@link #expression}
+     *
+     * @param var {@code <bind />} 标签的name属性值
+     * @param exp {@code <bind />} 标签的value属性值
+     */
     public VarDeclSqlNode(String var, String exp) {
         name = var;
         expression = exp;
     }
 
+    /**
+     * <ol>
+     *     <li>
+     *         调用{@link OgnlCache#getValue(String, Object)}传入{@link #expression}和{@code context}的{@link DynamicContext#getBindings()}从当前上下文获取对应的对象
+     *     </li>
+     *     <li>
+     *         将{@link #name}作为key，上面获得的对象作为value，调用{@code context}的{@link DynamicContext#bind(String, Object)}put到{@link DynamicContext#bindings}中
+     *     </li>
+     *     <li>
+     *         返回true
+     *     </li>
+     * </ol>
+     *
+     * @param context sql上下文
+     * @return
+     */
     @Override
     public boolean apply(DynamicContext context) {
-        // 获得值
         final Object value = OgnlCache.getValue(expression, context.getBindings());
-        // 绑定到上下文
         context.bind(name, value);
         return true;
     }

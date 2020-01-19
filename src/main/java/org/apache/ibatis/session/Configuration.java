@@ -222,7 +222,15 @@ public class Configuration {
     protected final Map<String, KeyGenerator> keyGenerators = new StrictMap<>("Key Generators collection");
 
     /**
-     * 已加载资源( Resource )集合
+     * 已加载资源( Resource )集合，其中资源包括：
+     * <ol>
+     *     <li>
+     *         "namespace:"+Mapper接口的全限定名（表示已经加载的mapper xml文件）
+     *     </li>
+     *     <li>
+     *         Mapper接口class对象的{@link Class#toString()}【表示已经加载了的mapper的class对象（解析注解等）】
+     *     </li>
+     * </ol>
      */
     protected final Set<String> loadedResources = new HashSet<>();
     /**
@@ -401,6 +409,11 @@ public class Configuration {
         this.mapUnderscoreToCamelCase = mapUnderscoreToCamelCase;
     }
 
+    /**
+     * 调用成员变量{@link #loadedResources}的{@link HashSet#add(Object)}传入{@code resource}添加到集合中
+     *
+     * @param resource
+     */
     public void addLoadedResource(String resource) {
         loadedResources.add(resource);
     }
@@ -640,6 +653,9 @@ public class Configuration {
         getLanguageRegistry().setDefaultDriverClass(driver);
     }
 
+    /**
+     * @return {@link #languageRegistry}的{@link LanguageDriverRegistry#getDefaultDriver()}
+     */
     public LanguageDriver getDefaultScriptingLanguageInstance() {
         return languageRegistry.getDefaultDriver();
     }
@@ -650,6 +666,12 @@ public class Configuration {
         return getDefaultScriptingLanguageInstance();
     }
 
+    /**
+     * 调用{@link MetaObject#forObject(Object, ObjectFactory, ObjectWrapperFactory, ReflectorFactory)}传入{@code object}、{@link #objectFactory}、{@link #objectWrapperFactory}、{@link #reflectorFactory}构建传入对象的{@link MetaObject}对象并返回
+     *
+     * @param object
+     * @return
+     */
     public MetaObject newMetaObject(Object object) {
         return MetaObject.forObject(object, objectFactory, objectWrapperFactory, reflectorFactory);
     }
@@ -715,6 +737,12 @@ public class Configuration {
         return executor;
     }
 
+    /**
+     * 调用成员变量{@link #keyGenerators}的{@link StrictMap#put(String, Object)}方法将{@code id}作为key，{@code keyGenerator}本身作为value进行设置
+     *
+     * @param id
+     * @param keyGenerator
+     */
     public void addKeyGenerator(String id, KeyGenerator keyGenerator) {
         keyGenerators.put(id, keyGenerator);
     }
@@ -727,10 +755,22 @@ public class Configuration {
         return keyGenerators.values();
     }
 
+    /**
+     * 调用成员变量{@link #keyGenerators}的方法{@link StrictMap#get(Object)}传入{@code id}获取对应的{@link KeyGenerator}对象并返回
+     *
+     * @param id
+     * @return
+     */
     public KeyGenerator getKeyGenerator(String id) {
         return keyGenerators.get(id);
     }
 
+    /**
+     * 调用成员变量{@link #keyGenerators}的非重写方法{@link HashMap#containsKey(Object)}传入{@code id}并返回结果
+     *
+     * @param id
+     * @return
+     */
     public boolean hasKeyGenerator(String id) {
         return keyGenerators.containsKey(id);
     }
@@ -753,7 +793,7 @@ public class Configuration {
     }
 
     /**
-     * 调用{@link StrictMap#get(Object)}获取{@link Cache}对象
+     * 调用成员变量{@link #caches}的{@link StrictMap#get(Object)}获取{@link Cache}对象
      *
      * @param id
      * @return
@@ -805,7 +845,7 @@ public class Configuration {
     }
 
     /**
-     * 传入一个{@link ResultMap}对象的id（全称或者缩写），调用成员变量{@link #resultMaps}.get(id)获取对应的{@link ResultMap}对象
+     * 传入一个{@link ResultMap}对象的id（全称或者缩写），调用成员变量{@link #resultMaps}.get(id)（{@link StrictMap#get(Object)}）获取对应的{@link ResultMap}对象
      *
      * @param id
      * @return
@@ -840,7 +880,12 @@ public class Configuration {
     public Collection<ParameterMap> getParameterMaps() {
         return parameterMaps.values();
     }
-
+    /**
+     * 传入一个{@link ParameterMap}对象的id（全称或者缩写），调用成员变量{@link #parameterMaps}.get(id)（{@link StrictMap#get(Object)}）获取对应的{@link ParameterMap}对象
+     *
+     * @param id
+     * @return
+     */
     public ParameterMap getParameterMap(String id) {
         return parameterMaps.get(id);
     }
@@ -849,6 +894,11 @@ public class Configuration {
         return parameterMaps.containsKey(id);
     }
 
+    /**
+     * 调用成员变量{@link #mappedStatements}的重写方法{@link StrictMap#put(String, Object)}传入{@code ms}的id和{@code ms}本身记录{@code ms}到{@link #mappedStatements}
+     *
+     * @param ms
+     */
     public void addMappedStatement(MappedStatement ms) {
         mappedStatements.put(ms.getId(), ms);
     }
@@ -887,6 +937,11 @@ public class Configuration {
         incompleteResultMaps.add(resultMapResolver);
     }
 
+    /**
+     * 调用成员变量{@link #incompleteMethods}的{@link LinkedList#add(Object)}传入{@code builder}
+     *
+     * @param builder
+     */
     public void addIncompleteMethod(MethodResolver builder) {
         incompleteMethods.add(builder);
     }
@@ -899,12 +954,25 @@ public class Configuration {
         return this.getMappedStatement(id, true);
     }
 
+    /**
+     * <ol>
+     *     <li>
+     *         如果{@code validateIncompleteStatements}为true则调用{@link #buildAllStatements()}（TODO :这里暂时看不太明白）
+     *     </li>
+     *     <li>
+     *         调用成员变量{@link #mappedStatements}的方法{@link StrictMap#get(Object)}传入{@code id}获取对应的{@link MappedStatement}对象并返回
+     *     </li>
+     * </ol>
+     *
+     *
+     * @param id
+     * @param validateIncompleteStatements
+     * @return
+     */
     public MappedStatement getMappedStatement(String id, boolean validateIncompleteStatements) {
-        // 校验，保证所有 MappedStatement 已经构造完毕
         if (validateIncompleteStatements) {
             buildAllStatements();
         }
-        // 获取 MappedStatement 对象
         return mappedStatements.get(id);
     }
 
@@ -920,10 +988,21 @@ public class Configuration {
         mapperRegistry.addMappers(packageName, superType);
     }
 
+    /**
+     * 调用{@link #mapperRegistry}的{@link MapperRegistry#addMappers(String)}传入{@code packageName}
+     *
+     * @param packageName 包名
+     */
     public void addMappers(String packageName) {
         mapperRegistry.addMappers(packageName);
     }
 
+    /**
+     * 调用成员变量{@link #mapperRegistry}的{@link MapperRegistry#addMapper(Class)}传入{@code type}
+     *
+     * @param type mapper{@link Class}对象
+     * @param <T>
+     */
     public <T> void addMapper(Class<T> type) {
         mapperRegistry.addMapper(type);
     }
@@ -932,6 +1011,12 @@ public class Configuration {
         return mapperRegistry.getMapper(type, sqlSession);
     }
 
+    /**
+     * 调用成员变量{@link #mapperRegistry}的{@link MapperRegistry#hasMapper(Class)}传入{@code type}
+     *
+     * @param type
+     * @return
+     */
     public boolean hasMapper(Class<?> type) {
         return mapperRegistry.hasMapper(type);
     }
@@ -940,6 +1025,21 @@ public class Configuration {
         return hasStatement(statementName, true);
     }
 
+    /**
+     * <ol>
+     *     <li>
+     *         如果{@code validateIncompleteStatements}为true则调用{@link #buildAllStatements()}（TODO :这里暂时看不太明白）
+     *     </li>
+     *     <li>
+     *         调用成员变量{@link #mappedStatements}的方法{@link StrictMap#containsKey(Object)}传入{@code statementName}判断是否存在该id对应的{@link MappedStatement}并把判断结果返回
+     *     </li>
+     * </ol>
+     *
+     *
+     * @param statementName id
+     * @param validateIncompleteStatements
+     * @return
+     */
     public boolean hasStatement(String statementName, boolean validateIncompleteStatements) {
         if (validateIncompleteStatements) {
             buildAllStatements();
@@ -951,10 +1051,25 @@ public class Configuration {
         cacheRefMap.put(namespace, referencedNamespace);
     }
 
-    /*
+    /**
      * Parses all the unprocessed statement nodes in the cache. It is recommended
      * to call this method once all the mappers are added as it provides fail-fast
-     * statement validation.
+     * statement validation. <br> (TODO: 看不太懂)
+     *
+     * <ol>
+     *     <li>
+     *         如果!{@link #incompleteResultMaps}.isEmpty()则：使用 synchronized 锁住 {@link #incompleteResultMaps}，调用 {@link #incompleteResultMaps}.iterator().next().resolve();
+     *     </li>
+     *     <li>
+     *         如果!{@link #incompleteCacheRefs}.isEmpty()则：使用 synchronized 锁住 {@link #incompleteCacheRefs}，调用 {@link #incompleteCacheRefs}.iterator().next().resolveCacheRef();
+     *     </li>
+     *     <li>
+     *         如果!{@link #incompleteStatements}.isEmpty()则：使用 synchronized 锁住 {@link #incompleteStatements}，调用 {@link #incompleteStatements}.iterator().next().parseStatementNode();
+     *     </li>
+     *     <li>
+     *         如果!{@link #incompleteMethods}.isEmpty()则：使用 synchronized 锁住 {@link #incompleteMethods}，调用 {@link #incompleteMethods}.iterator().next().resolve();
+     *     </li>
+     * </ol>
      */
     protected void buildAllStatements() {
         if (!incompleteResultMaps.isEmpty()) {

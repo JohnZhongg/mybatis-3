@@ -49,14 +49,23 @@ import java.util.Optional;
 public class MapperMethod {
 
     /**
-     * SqlCommand 对象
+     * {@link SqlCommand} 对象
      */
     private final SqlCommand command;
     /**
-     * MethodSignature 对象
+     * {@link MethodSignature} 对象
      */
     private final MethodSignature method;
 
+    /**
+     * <ol>
+     *     <li>调用构造器{@link SqlCommand#SqlCommand(Configuration, Class, Method)}传入{@code config}、{@code mapperInterface}、{@code method} 三个参数，构造一个{@link SqlCommand}对象并赋值到{@link #command}</li>
+     * </ol>
+     *
+     * @param mapperInterface mapper接口类对象{@link Class}
+     * @param method 方法对象{@link Method}
+     * @param config 全局{@link Configuration}对象
+     */
     public MapperMethod(Class<?> mapperInterface, Method method, Configuration config) {
         this.command = new SqlCommand(config, mapperInterface, method);
         this.method = new MethodSignature(config, mapperInterface, method);
@@ -252,7 +261,7 @@ public class MapperMethod {
     }
 
     /**
-     * SQL 命令
+     * SQL命令（类型{@link SqlCommand#type}）
      */
     public static class SqlCommand {
 
@@ -261,68 +270,144 @@ public class MapperMethod {
          */
         private final String name;
         /**
-         * SQL 命令类型
+         * SQL 命令类型 {@link MappedStatement#getSqlCommandType()}
          */
         private final SqlCommandType type;
 
+        /**
+         * <ol>
+         *     <li>调用{@code method}的{@link Method#getName()}获取方法名称，然后调用{@code method}的{@link Method#getDeclaringClass()}获取方法的声明类对象</li>
+         *     <li>调用{@link #resolveMappedStatement(Class, String, Class, Configuration)}传入 {@code mapperInterface}、前一步获取的方法名称、前一步获取的方法声明类对象、{@code configuration}尝试获取该方法的{@link MappedStatement}对象</li>
+         *     <li>
+         *         判断前一步获取的{@link MappedStatement}对象 == null
+         *         <ul>
+         *             <li>
+         *                 true：
+         *                 <ul>
+         *                     调用{@code method}的{@link Method#getAnnotation(Class)}传入{@link Flush}.class尝试获取方法上的{@link Flush}注解对象，然后判断获取导的对象 != null
+         *                     <li>true：将null赋值导{@link #name}、将{@link SqlCommandType#FLUSH}赋值到{@link #type}</li>
+         *                     <li>false：直接抛出异常{@link BindingException}</li>
+         *                 </ul>
+         *             </li>
+         *             <li>
+         *                 false：调用获取到的{@link MappedStatement}对象的{@link MappedStatement#getId()}并赋值到{@link #name}，调用{@link MappedStatement#getSqlCommandType()}并赋值到{@link #type}，
+         *                 如果此时{@link #type} == {@link SqlCommandType#UNKNOWN}：直接抛出异常{@link BindingException}；否则什么也不做
+         *             </li>
+         *         </ul>
+         *     </li>
+         * </ol>
+         *
+         * @param configuration 全局{@link Configuration}对象
+         * @param mapperInterface mapper接口类对象
+         * @param method 方法对象
+         */
         public SqlCommand(Configuration configuration, Class<?> mapperInterface, Method method) {
             final String methodName = method.getName();
             final Class<?> declaringClass = method.getDeclaringClass();
-            // 获得 MappedStatement 对象
-            MappedStatement ms = resolveMappedStatement(mapperInterface, methodName, declaringClass,
-                    configuration);
-            // 找不到 MappedStatement
+            MappedStatement ms = resolveMappedStatement(mapperInterface, methodName, declaringClass, configuration);
             if (ms == null) {
-                // 如果有 @Flush 注解，则标记为 FLUSH 类型
                 if (method.getAnnotation(Flush.class) != null) {
                     name = null;
                     type = SqlCommandType.FLUSH;
-                } else { // 抛出 BindingException 异常，如果找不到 MappedStatement
+                } else {
                     throw new BindingException("Invalid bound statement (not found): "
                             + mapperInterface.getName() + "." + methodName);
                 }
-            // 找到 MappedStatement
             } else {
-                // 获得 name
                 name = ms.getId();
-                // 获得 type
                 type = ms.getSqlCommandType();
-                if (type == SqlCommandType.UNKNOWN) { // 抛出 BindingException 异常，如果是 UNKNOWN 类型
+                if (type == SqlCommandType.UNKNOWN) {
                     throw new BindingException("Unknown execution method for: " + name);
                 }
             }
         }
 
+        /**
+         * @return {@link #name}
+         */
         public String getName() {
             return name;
         }
 
+        /**
+         * @return {@link #type}
+         */
         public SqlCommandType getType() {
             return type;
         }
 
-        private MappedStatement resolveMappedStatement(Class<?> mapperInterface, String methodName,
-                                                       Class<?> declaringClass, Configuration configuration) {
-            // 获得编号
+        /**
+         * <ol>
+         *     <li>
+         *         调用{@code mapperInterfac}的{@link Class#getName()} 拼接 "." 拼接 {@code methodName}获得当前mapper方法对应的{@link MappedStatement}id
+         *     </li>
+         *     <li>
+         *         调用{@code configuration}的{@link Configuration#hasStatement(String)}传入前一步拼接的{@link MappedStatement}id，判断该{@link MappedStatement}对象是否存在：
+         *         <ul>
+         *             <li>
+         *                 存在：直接return {@code configuration}的{@link Configuration#getMappedStatement(String)}传入该id，方法结束
+         *             </li>
+         *             <li>
+         *                 不存在：通过{@code mapperInterface}.equals({@code declaringClass})判断当前mapper接口类对象{@code mapperInterface}已经是声明该方法的类对象{@code declaringClass}（递归出口）
+         *                 <ul>
+         *                     <li>
+         *                         是：直接return null，方法结束
+         *                     </li>
+         *                     <li>
+         *                         否：什么也不做，继续往下走
+         *                     </li>
+         *                 </ul>
+         *             </li>
+         *         </ul>
+         *     </li>
+         *     <li>
+         *         调用{@code mapperInterface}的{@link Class#getInterfaces()}获取当前mapper接口类的所有继承的接口对象数组，然后遍历迭代该数组，对于每一个迭代的{@link Class}对象：
+         *         <ul>
+         *             通过"{@code declaringClass}.isAssignableFrom(当前迭代的{@link Class}对象)"判断当前迭代的{@link Class}对象是否为声明了该方法的{@link Class}对象的子孙类
+         *             <li>
+         *                 是：
+         *                 <ol>
+         *                     <li>
+         *                         调用本方法{@link #resolveMappedStatement(Class, String, Class, Configuration)}传入 "当前迭代的接口{@link Class}对象"、{@code methodName}、{@code declaringClass}、{@code configuration} 四个参数，递归获取{@link MappedStatement}对象。
+         *                     </li>
+         *                     <li>
+         *                         判断前面对于本方法自身递归调用返回的接口 != null
+         *                         <ul>
+         *                             <li>true：直接return 该接口，方法结束</li>
+         *                             <li>false：什么也不做，进入循环下一轮迭代，或者循环结束</li>
+         *                         </ul>
+         *                     </li>
+         *                 </ol>
+         *             </li>
+         *             <li>
+         *                 否：什么也不做，进入循环下一轮迭代，或者循环结束
+         *             </li>
+         *         </ul>
+         *     </li>
+         *     <li>当前前一步的循环结束了还没结束方法，来到了这里，直接return null，方法结束</li>
+         * </ol>
+         *
+         * @param mapperInterface mapper接口类对象
+         * @param methodName 方法名{@link Method#getName()}
+         * @param declaringClass 声明了该方法的类{@link Class}对象（{@link Method#getDeclaringClass()}）（注意：不一定mapper的方法就是在其接口类中声明的，可能是在父接口中声明，也有可能它对父接口中声明的方法进行了重写）
+         * @param configuration 全局{@link Configuration}
+         * @return
+         */
+        private MappedStatement resolveMappedStatement(Class<?> mapperInterface, String methodName, Class<?> declaringClass, Configuration configuration) {
             String statementId = mapperInterface.getName() + "." + methodName;
-            // 如果有，获得 MappedStatement 对象，并返回
             if (configuration.hasStatement(statementId)) {
                 return configuration.getMappedStatement(statementId);
-            // 如果没有，并且当前方法就是 declaringClass 声明的，则说明真的找不到
             } else if (mapperInterface.equals(declaringClass)) {
                 return null;
             }
-            // 遍历父接口，继续获得 MappedStatement 对象
             for (Class<?> superInterface : mapperInterface.getInterfaces()) {
                 if (declaringClass.isAssignableFrom(superInterface)) {
-                    MappedStatement ms = resolveMappedStatement(superInterface, methodName,
-                            declaringClass, configuration);
+                    MappedStatement ms = resolveMappedStatement(superInterface, methodName, declaringClass, configuration);
                     if (ms != null) {
                         return ms;
                     }
                 }
             }
-            // 真的找不到，返回 null
             return null;
         }
 

@@ -68,6 +68,12 @@ public class XNode {
         this.body = parseBody(node);
     }
 
+    /**
+     * 调用{@link XNode#XNode(XPathParser, Node, Properties)}传入当前对象的{@link #xpathParser}、{@code node}、当前对象的{@link #variables}new一个{@link XNode}对象
+     *
+     * @param node
+     * @return
+     */
     public XNode newXNode(Node node) {
         return new XNode(xpathParser, node, variables);
     }
@@ -129,6 +135,12 @@ public class XNode {
         return xpathParser.evalDouble(node, expression);
     }
 
+    /**
+     * 当前方法不会返回null，只会是空列表
+     *
+     * @param expression
+     * @return
+     */
     public List<XNode> evalNodes(String expression) {
         return xpathParser.evalNodes(node, expression);
     }
@@ -260,6 +272,13 @@ public class XNode {
         return getBooleanAttribute(name, null);
     }
 
+    /**
+     * 从{@link #attributes}中获取key为{@code name}的value，然后调用{@link Boolean#valueOf(String)}传入该value转化为{@link Boolean}对象进行返回；如果value是null，则返回{@code def}。（{@link #attributes}中的value都是处理了token"${}"的）
+     *
+     * @param name
+     * @param def
+     * @return
+     */
     public Boolean getBooleanAttribute(String name, Boolean def) {
         String value = attributes.getProperty(name);
         if (value == null) {

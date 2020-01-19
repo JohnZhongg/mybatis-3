@@ -38,8 +38,10 @@ public class MethodResolver {
         this.method = method;
     }
 
+    /**
+     * 调用{@link #annotationBuilder}的{@link MapperAnnotationBuilder#parseStatement(Method)}传入{@link #method}进行方法解析
+     */
     public void resolve() {
-        // 执行注解方法的解析
         annotationBuilder.parseStatement(method);
     }
 
